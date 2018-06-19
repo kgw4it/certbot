@@ -149,7 +149,7 @@ class _EasyNameAPIClient(object):
 		"""
 		Requests a list of all active domains
 		"""
-		return self.do_request('GET', 'domain?offset={0}&limit={1}'.format(offset, limit))
+		return self.do_request('GET', 'domain?offset={0}&limit={1}'.format(offset, limit), [])
 	
 	def get_domain(self, domain_name):
 		"""
@@ -199,6 +199,6 @@ class _EasyNameAPIClient(object):
 		for i in entries:
 			entry = entries[i]	
 			if entry['name'] is name and entry['type'] is type and entry['content'] is content:
-				return self.do_request('POST', 'domain/{0}/dns/{1}/delete'.format(domain['id'], entry['id']))
+				return self.do_request('POST', 'domain/{0}/dns/{1}/delete'.format(domain['id'], entry['id']), [])
 				
 		raise errors.PluginError('DNS entry not found ({0}): {1}, {2}, {3}'.format(domain_name, name, type, content))
