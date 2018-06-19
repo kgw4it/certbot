@@ -5,10 +5,10 @@ EXPOSE 80 443
 VOLUME /etc/letsencrypt /var/lib/letsencrypt
 WORKDIR /opt/certbot
 
-COPY CHANGES.rst README.rst setup.py src/
-COPY acme src/acme
-COPY certbot src/certbot
-COPY certbot-dns-easyname src/certbot-dns-easyname
+COPY ../CHANGES.rst ../README.rst ../setup.py src/
+COPY ../acme src/acme
+COPY ../certbot src/certbot
+COPY ../certbot-dns-easyname src/certbot-dns-easyname
 
 RUN apk add --no-cache --virtual .certbot-deps \
         libffi \
