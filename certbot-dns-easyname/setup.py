@@ -63,5 +63,4 @@ setup(
             'dns-easyname = certbot_dns_easyname.dns_easyname:Authenticator',
         ],
     },
-    test_suite='certbot_dns_easyname',
 )
