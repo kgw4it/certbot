@@ -4,7 +4,7 @@
 # You can set these variables from the command line.
 SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
-SPHINXPROJ    = certbot-dns-google
+SPHINXPROJ    = certbot-dns-easyname
 SOURCEDIR     = .
 BUILDDIR      = _build
 

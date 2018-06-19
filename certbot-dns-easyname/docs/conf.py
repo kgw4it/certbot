@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# certbot-dns-google documentation build configuration file, created by
+# certbot-dns-easyname documentation build configuration file, created by
 # sphinx-quickstart on Wed May 10 15:47:49 2017.
 #
 # This file is execfile()d with the current directory set to its
@@ -53,7 +53,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'certbot-dns-google'
+project = u'certbot-dns-easyname'
 copyright = u'2017, Certbot Project'
 author = u'Certbot Project'
 
@@ -117,7 +117,7 @@ html_static_path = ['_static']
 # -- Options for HTMLHelp output ------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'certbot-dns-googledoc'
+htmlhelp_basename = 'certbot-dns-easynamedoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -144,7 +144,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'certbot-dns-google.tex', u'certbot-dns-google Documentation',
+    (master_doc, 'certbot-dns-easyname.tex', u'certbot-dns-easyname Documentation',
      u'Certbot Project', 'manual'),
 ]
 
@@ -154,7 +154,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'certbot-dns-google', u'certbot-dns-google Documentation',
+    (master_doc, 'certbot-dns-easyname', u'certbot-dns-easyname Documentation',
      [author], 1)
 ]
 
@@ -165,8 +165,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'certbot-dns-google', u'certbot-dns-google Documentation',
-     author, 'certbot-dns-google', 'One line description of project.',
+    (master_doc, 'certbot-dns-easyname', u'certbot-dns-easyname Documentation',
+     author, 'certbot-dns-easyname', 'One line description of project.',
      'Miscellaneous'),
 ]
 
