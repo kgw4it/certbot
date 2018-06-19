@@ -13,7 +13,7 @@ install_requires = [
     'zope.interface',
     'httplib2',
 	# required libs
-	'base64',
+	'pybase64',
 	'hashlib',
 	'urllib',
 	'time',
