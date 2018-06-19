@@ -31,11 +31,11 @@ credentials, obtained from your Easyname
    :caption: Example credentials file:
 
    # Easyname API credentials used by Certbot
-   dns_easyname_user_id = 123
-   dns_easyname_email = easyname@example.com
-   dns_easyname_api_key = 0123456789abcdef0123456789abcdef01234567
-   dns_easyname_api_auth_salt = 012%s345%s678
-   dns_easyname_api_signing_salt = 0123456789abcdef0123456789abcdef01234567
+   certbot_dns_easyname:dns_easyname_user_id = 123
+   certbot_dns_easyname:dns_easyname_email = easyname@example.com
+   certbot_dns_easyname:dns_easyname_api_key = 0123456789abcdef0123456789abcdef01234567
+   certbot_dns_easyname:dns_easyname_api_auth_salt = 012%s345%s678
+   certbot_dns_easyname:dns_easyname_api_signing_salt = 0123456789abcdef0123456789abcdef01234567
 
 The path to this file can be provided interactively or using the
 ``--certbot-dns-easyname:dns-easyname-credentials`` command-line argument. 
@@ -65,7 +65,7 @@ Examples
    :caption: To acquire a certificate for ``example.com``
 
    certbot certonly \\
-     --certbot-dns-easyname:dns-easyname \\
+     -a certbot-dns-easyname:dns-easyname \\
      --certbot-dns-easyname:dns-easyname-credentials ~/.secrets/certbot/easyname.ini \\
      -d example.com
 
@@ -74,7 +74,7 @@ Examples
              ``www.example.com``
 
    certbot certonly \\
-     --certbot-dns-easyname:dns-easyname \\
+     -a certbot-dns-easyname:dns-easyname \\
      --certbot-dns-easyname:dns-easyname-credentials ~/.secrets/certbot/easyname.ini \\
      -d example.com \\
      -d www.example.com
@@ -84,7 +84,7 @@ Examples
              for DNS propagation
 
    certbot certonly \\
-     --certbot-dns-easyname:dns-easyname \\
+     -a certbot-dns-easyname:dns-easyname \\
      --certbot-dns-easyname:dns-easyname-credentials ~/.secrets/certbot/easyname.ini \\
      --certbot-dns-easyname:dns-easyname-propagation-seconds 60 \\
      -d example.com

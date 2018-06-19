@@ -119,7 +119,7 @@ class _EasyNameAPIClient(object):
 		body = {
 			'data': data,
 			'timestamp': timestamp,
-			'signature': get_request_signature(data, timestamp)
+			'signature': self.get_request_signature(data, timestamp)
 		}
 		return urllib.urlencode(json.dumps(body))
 	
@@ -133,13 +133,13 @@ class _EasyNameAPIClient(object):
 			'Accept': 'application/json',
 			'Content-Type': 'application/json',
 			'X-User-ApiKey': self.configuration.conf('api-key'),
-			'X-User-Authentication': get_api_authentication()
+			'X-User-Authentication': self.get_api_authentication()
 		}
 		
 		if method is 'GET':
 			resp = requests.get(url, headers=headers)
 		elif method is 'POST':
-			resp = requests.post(url, headers=headers, data=create_request_body(data))
+			resp = requests.post(url, headers=headers, data=self.create_request_body(data))
 		else:
 			raise errors.PluginError('Unknown request method {0}.'.format(method))
 		
@@ -149,13 +149,13 @@ class _EasyNameAPIClient(object):
 		"""
 		Requests a list of all active domains
 		"""
-		return do_request('GET', 'domain?offset={0}&limit={1}'.format(offset, limit))
+		return self.do_request('GET', 'domain?offset={0}&limit={1}'.format(offset, limit))
 	
 	def get_domain(self, domain_name):
 		"""
 		Get the specified domain document
 		"""
-		domains = list_domains(100, 0)
+		domains = self.list_domains(100, 0)
 		for i in domains:
 			domain = domains[i]
 			if domain['domain'] is domain_name:
@@ -167,8 +167,8 @@ class _EasyNameAPIClient(object):
 		"""
 		Adds a DNS entry to the specified domain
 		"""
-		domain = get_domain(domain_name)
-		return do_request('POST', 'domain/{0}/dns'.format(domain['id']), {
+		domain = self.get_domain(domain_name)
+		return self.do_request('POST', 'domain/{0}/dns'.format(domain['id']), {
 			'name': name,
 			'type': type,
 			'content': content,
@@ -180,8 +180,8 @@ class _EasyNameAPIClient(object):
 		"""
 		Get all DNS entries of the specified domain
 		"""
-		domain = get_domain(domain_name)
-		return do_request('GET', 'domain/{0}/dns?offset={1}&limit={2}'.format(domain['id'], offset, limit), {
+		domain = self.get_domain(domain_name)
+		return self.do_request('GET', 'domain/{0}/dns?offset={1}&limit={2}'.format(domain['id'], offset, limit), {
 			'name': name,
 			'type': type,
 			'content': content,
@@ -193,12 +193,12 @@ class _EasyNameAPIClient(object):
 		"""
 		Deletes a DNS entry on the specified domain, if found
 		"""
-		domain = get_domain(domain_name)
-		entries = list_dns(domain['id'])
+		domain = self.get_domain(domain_name)
+		entries = self.list_dns(domain['id'])
 		
 		for i in entries:
 			entry = entries[i]	
 			if entry['name'] is name and entry['type'] is type and entry['content'] is content:
-				return do_request('POST', 'domain/{0}/dns/{1}/delete'.format(domain['id'], entry['id']))
+				return self.do_request('POST', 'domain/{0}/dns/{1}/delete'.format(domain['id'], entry['id']))
 				
 		raise errors.PluginError('DNS entry not found ({0}): {1}, {2}, {3}'.format(domain_name, name, type, content))
