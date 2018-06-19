@@ -14,8 +14,6 @@ install_requires = [
     'httplib2',
 	# required libs
 	'pybase64',
-	'urllib',
-	'time',
 	'requests'
 ]
 
