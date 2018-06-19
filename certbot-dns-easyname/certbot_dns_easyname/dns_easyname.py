@@ -76,8 +76,7 @@ class _EasyNameAPIClient(object):
     """
 
     def __init__(self, configuration, base_url):
-
-        self.configuration = configuration
+		self.configuration = configuration
 		self.base_url = base_url
 
 	def get_api_authentication(self):
