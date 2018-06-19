@@ -15,7 +15,7 @@ install_requires = [
 	# required libs
 	'base64',
 	'hashlib',
-	'urllib'.
+	'urllib',
 	'time',
 	'requests'
 ]
