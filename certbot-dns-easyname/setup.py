@@ -59,7 +59,7 @@ setup(
     },
     entry_points={
         'certbot.plugins': [
-            'dns-easyname = certbot_dns_easyname.dns_easyname:Authenticator',
+            'certonly-dns-easyname = certbot_dns_easyname.dns_easyname:Authenticator',
         ],
     },
 )
