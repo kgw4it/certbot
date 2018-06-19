@@ -117,8 +117,8 @@ class _EasyNameAPIClient(object):
 		"""
 		timestamp = int(time.time())
 		body = {
-			'data': data
-			'timestamp': timestamp 
+			'data': data,
+			'timestamp': timestamp,
 			'signature': get_request_signature(data, timestamp)
 		}
 		return urllib.urlencode(json.dumps(body))
