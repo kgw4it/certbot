@@ -1,5 +1,4 @@
 from setuptools import setup
-from setuptools import find_packages
 
 
 version = '0.26.0.dev0'
@@ -52,7 +51,7 @@ setup(
         'Topic :: Utilities',
     ],
 
-    packages=find_packages(),
+    package='certbot_dns_easyname.dns_easyname.py',
     include_package_data=True,
     install_requires=install_requires,
     extras_require={
