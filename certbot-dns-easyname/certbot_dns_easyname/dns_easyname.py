@@ -23,59 +23,59 @@ BASE_URL = 'https://api.easyname.com'
 @zope.interface.implementer(interfaces.IAuthenticator)
 @zope.interface.provider(interfaces.IPluginFactory)
 class Authenticator(dns_common.DNSAuthenticator):
-    """DNS Authenticator for Easyname DNS
+	"""DNS Authenticator for Easyname DNS
 
-    This Authenticator uses the Easyname DNS API to fulfill a dns-01 challenge.
-    """
+	This Authenticator uses the Easyname DNS API to fulfill a dns-01 challenge.
+	"""
 
-    description = ('Obtain certificates using a DNS TXT record (if you are using Easyname '
-                   'for DNS).')
-    ttl = 60
+	description = ('Obtain certificates using a DNS TXT record (if you are using Easyname '
+				   'for DNS).')
+	ttl = 60
 
-    def __init__(self, *args, **kwargs):
-        super(Authenticator, self).__init__(*args, **kwargs)
-        self.credentials = None
+	def __init__(self, *args, **kwargs):
+		super(Authenticator, self).__init__(*args, **kwargs)
+		self.credentials = None
 
-    @classmethod
-    def add_parser_arguments(cls, add):  # pylint: disable=arguments-differ
-        super(Authenticator, cls).add_parser_arguments(add, default_propagation_seconds=30)
-        add('credentials',
-            help=('Path to Easyname DNS configuration file'),
-            default=None)
+	@classmethod
+	def add_parser_arguments(cls, add):  # pylint: disable=arguments-differ
+		super(Authenticator, cls).add_parser_arguments(add, default_propagation_seconds=30)
+		add('credentials',
+			help=('Path to Easyname DNS configuration file'),
+			default=None)
 
-    def more_info(self): # pylint: disable=missing-docstring,no-self-use
-        return 'This plugin configures a DNS TXT record to respond to a dns-01 challenge using ' + \
-               'the Easyname DNS API.'
+	def more_info(self): # pylint: disable=missing-docstring,no-self-use
+		return 'This plugin configures a DNS TXT record to respond to a dns-01 challenge using ' + \
+			   'the Easyname DNS API.'
 
-    def _setup_credentials(self):
-        self.credentials = self._configure_credentials(
-            'credentials',
-            'Easyname credentials INI file',
-            {
+	def _setup_credentials(self):
+		self.credentials = self._configure_credentials(
+			'credentials',
+			'Easyname credentials INI file',
+			{
 				'user-id': 'user-id associated with your Easyname account',
-                'email': 'email address associated with your Easyname account',
+				'email': 'email address associated with your Easyname account',
 				'api-key': 'API Key found on the API Credentials Page',
 				'api-auth-salt': 'API Authentication Salt found on the API Credentials Page',
 				'api-signing-salt': 'API Signing Salt found on the API Credentials Page'
-            }
-        )
+			}
+		)
 
-    def _perform(self, domain, validation_name, validation):
-        self._get_easyname_api_client().create_dns(domain, validation_name, 'txt', validation, 10, self.ttl)
+	def _perform(self, domain, validation_name, validation):
+		self._get_easyname_api_client().create_dns(domain, validation_name, 'txt', validation, 10, self.ttl)
 
-    def _cleanup(self, domain, validation_name, validation):
-        self._get_easyname_api_client().delete_dns(domain, validation_name, 'txt', validation)
+	def _cleanup(self, domain, validation_name, validation):
+		self._get_easyname_api_client().delete_dns(domain, validation_name, 'txt', validation)
 
-    def _get_easyname_api_client(self):
-        return _EasyNameAPIClient(self.conf('credentials'), BASE_URL)
+	def _get_easyname_api_client(self):
+		return _EasyNameAPIClient(self.conf('credentials'), BASE_URL)
 
 
 class _EasyNameAPIClient(object):
-    """
-    Encapsulates all communication with the Easyname API.
-    """
+	"""
+	Encapsulates all communication with the Easyname API.
+	"""
 
-    def __init__(self, configuration, base_url):
+	def __init__(self, configuration, base_url):
 		self.configuration = configuration
 		self.base_url = base_url
 
