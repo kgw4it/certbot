@@ -458,6 +458,8 @@ plugins:
                         using BIND for DNS). (default: False)
   --dns-route53         Obtain certificates using a DNS TXT record (if you are
                         using Route53 for DNS). (default: False)
+  --dns-easyname        Obtain certificates using a DNS TXT record (if you are
+                        using Easyname for DNS). (default: False)
 
 apache:
   Apache Web Server plugin - Beta
