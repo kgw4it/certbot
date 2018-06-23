@@ -61,10 +61,14 @@ class Authenticator(dns_common.DNSAuthenticator):
 		)
 
 	def _perform(self, domain, validation_name, validation):
-		self._get_easyname_api_client().create_dns(domain, validation_name, 'txt', validation, 10, self.ttl)
+		domain_length = len(domain)
+		final_validation_name_length = len(validation_name) - domain_length - 1
+		self._get_easyname_api_client().create_dns(domain, validation_name[0:final_validation_name_length], 'txt', validation, 10, self.ttl)
 
 	def _cleanup(self, domain, validation_name, validation):
-		self._get_easyname_api_client().delete_dns(domain, validation_name, 'txt', validation)
+		domain_length = len(domain)
+		final_validation_name_length = len(validation_name) - domain_length - 1
+		self._get_easyname_api_client().delete_dns(domain, validation_name[0:final_validation_name_length], 'txt', validation)
 
 	def _get_easyname_api_client(self):
 		return _EasyNameAPIClient(self.credentials, BASE_URL)
