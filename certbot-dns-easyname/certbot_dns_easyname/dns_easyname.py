@@ -143,13 +143,10 @@ class _EasyNameAPIClient(object):
 		else:
 			raise errors.PluginError('Unknown request method {0}.'.format(method))
 		
-		parsed_resp = None
-		try:
-			parsed_resp = json.loads(resp)
-		except:
-			raise errors.PluginError('Unable to parse response: {0}'.format(resp))
+		if resp.status_code is not 200:
+			raise errors.PluginError('Request failed with status code {0}: {1}'.format(resp.status_code, resp.text))
 		
-		return parsed_resp
+		return resp.json()
 	
 	def list_domains(self, limit=10, offset=0):
 		"""
