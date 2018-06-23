@@ -187,13 +187,7 @@ class _EasyNameAPIClient(object):
 		Get all DNS entries of the specified domain
 		"""
 		domain = self.get_domain(domain_name)
-		return self.do_request('GET', 'domain/{0}/dns?offset={1}&limit={2}'.format(domain['id'], offset, limit), {
-			'name': name,
-			'type': type,
-			'content': content,
-			'priority': priority,
-			'ttl': ttl
-		})
+		return self.do_request('GET', 'domain/{0}/dns?offset={1}&limit={2}'.format(domain['id'], offset, limit), {})
 	
 	def delete_dns(self, domain_name, name, type, content):
 		"""
