@@ -147,7 +147,7 @@ class _EasyNameAPIClient(object):
 		try:
 			parsed_resp = json.loads(resp)
 		except:
-			raise errors.PluginError('Unable to parse response: {0}'.format(resp)
+			raise errors.PluginError('Unable to parse response: {0}'.format(resp))
 		
 		return parsed_resp
 	
