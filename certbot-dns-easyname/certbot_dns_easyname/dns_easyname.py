@@ -85,14 +85,14 @@ class _EasyNameAPIClient(object):
 		"""
 		m = hashlib.md5()
 		m.update(self.configuration.conf('api-auth-salt') % (self.configuration.conf('user-id'), self.configuration.conf('email')))
-		return base64.b64encode(m.digest())
+		return base64.b64encode(m.hexdigest())
 			
 	def get_request_signature(self, data, timestamp):
 		"""
 		Returns the value for the signature key of the body
 		"""
 		keys = data.keys()
-		keys.append(['timestamp'])
+		keys.append('timestamp')
 		keys.sort()
 		
 		string = ''
@@ -109,7 +109,7 @@ class _EasyNameAPIClient(object):
 		
 		m = hashlib.md5()
 		m.update(string[:pos] + self.configuration.conf('api-signing-salt') + string[pos:])
-		return base64.b64encode(m.digest())
+		return base64.b64encode(m.hexdigest())
 		
 	def create_request_body(self, data):
 		"""
@@ -121,7 +121,7 @@ class _EasyNameAPIClient(object):
 			'timestamp': timestamp,
 			'signature': self.get_request_signature(data, timestamp)
 		}
-		return urllib.urlencode(json.dumps(body))
+		return json.dumps(body)
 	
 	def do_request(self, method, path, data):
 		"""
@@ -146,21 +146,20 @@ class _EasyNameAPIClient(object):
 		if resp.status_code is not 200:
 			raise errors.PluginError('Request failed with status code {0}: {1}'.format(resp.status_code, resp.text))
 		
-		return resp.json()
+		return resp.json()['data']
 	
 	def list_domains(self, limit=10, offset=0):
 		"""
 		Requests a list of all active domains
 		"""
-		return self.do_request('GET', 'domain?offset={0}&limit={1}'.format(offset, limit), [])
+		return self.do_request('GET', 'domain?offset={0}&limit={1}'.format(offset, limit), {})
 	
 	def get_domain(self, domain_name):
 		"""
 		Get the specified domain document
 		"""
 		domains = self.list_domains(100, 0)
-		for i in domains:
-			domain = domains[i]
+		for domain in domains:
 			if domain['domain'] is domain_name:
 				return domain
 				
@@ -199,9 +198,8 @@ class _EasyNameAPIClient(object):
 		domain = self.get_domain(domain_name)
 		entries = self.list_dns(domain['id'])
 		
-		for i in entries:
-			entry = entries[i]	
+		for entry in entries:
 			if entry['name'] is name and entry['type'] is type and entry['content'] is content:
-				return self.do_request('POST', 'domain/{0}/dns/{1}/delete'.format(domain['id'], entry['id']), [])
+				return self.do_request('POST', 'domain/{0}/dns/{1}/delete'.format(domain['id'], entry['id']), {})
 				
 		raise errors.PluginError('DNS entry not found ({0}): {1}, {2}, {3}'.format(domain_name, name, type, content))
