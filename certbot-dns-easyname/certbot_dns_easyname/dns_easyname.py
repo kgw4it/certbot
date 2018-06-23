@@ -143,7 +143,7 @@ class _EasyNameAPIClient(object):
 		else:
 			raise errors.PluginError('Unknown request method {0}.'.format(method))
 		
-		try
+		try:
 			parsed_resp = json.loads(resp)
 			return parsed_resp
 		except:
