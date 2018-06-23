@@ -97,7 +97,7 @@ class _EasyNameAPIClient(object):
 		
 		string = ''
 		for key in keys:
-			if key is 'timestamp':
+			if key == 'timestamp':
 				string += str(timestamp)
 			else:
 				string += str(data[key])
@@ -136,14 +136,14 @@ class _EasyNameAPIClient(object):
 			'X-User-Authentication': self.get_api_authentication()
 		}
 		
-		if method is 'GET':
+		if method == 'GET':
 			resp = requests.get(url, headers=headers)
-		elif method is 'POST':
+		elif method == 'POST':
 			resp = requests.post(url, headers=headers, data=self.create_request_body(data))
 		else:
 			raise errors.PluginError('Unknown request method {0}.'.format(method))
 		
-		if resp.status_code is not 200:
+		if resp.status_code != 200:
 			raise errors.PluginError('Request failed with status code {0}: {1}'.format(resp.status_code, resp.text))
 		
 		return resp.json()['data']
@@ -160,7 +160,7 @@ class _EasyNameAPIClient(object):
 		"""
 		domains = self.list_domains(100, 0)
 		for domain in domains:
-			if domain['domain'] is domain_name:
+			if domain['domain'] == domain_name:
 				return domain
 				
 		raise errors.PluginError('Domain not found: {0}'.format(domain_name))
@@ -199,7 +199,7 @@ class _EasyNameAPIClient(object):
 		entries = self.list_dns(domain['id'])
 		
 		for entry in entries:
-			if entry['name'] is name and entry['type'] is type and entry['content'] is content:
+			if entry['name'] == name and entry['type'] == type and entry['content'] == content:
 				return self.do_request('POST', 'domain/{0}/dns/{1}/delete'.format(domain['id'], entry['id']), {})
 				
 		raise errors.PluginError('DNS entry not found ({0}): {1}, {2}, {3}'.format(domain_name, name, type, content))
