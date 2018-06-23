@@ -195,8 +195,7 @@ class _EasyNameAPIClient(object):
 		"""
 		Deletes a DNS entry on the specified domain, if found
 		"""
-		domain = self.get_domain(domain_name)
-		entries = self.list_dns(domain['id'])
+		entries = self.list_dns(domain_name)
 		
 		for entry in entries:
 			if entry['name'] == name and entry['type'] == type and entry['content'] == content:
