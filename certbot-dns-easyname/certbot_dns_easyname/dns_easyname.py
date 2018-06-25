@@ -205,13 +205,13 @@ class _EasyNameAPIClient(object):
 		"""
 		Adds a DNS entry to the specified domain
 		"""
-		domain = self.get_domain(domain_name)		
+		domain = self.get_domain(domain_name)
 		
 		url_create_dns = self.base_url_web + '/domains/settings/form.php?domain={0}'.format(domain['id'])
 		data_create_dns = {
 			'id': '',
 			'action': 'save',
-			'name': name,
+			'name': name.replace('.' + domain['domain'], ''),
 			'type': type.upper(),
 			'content': content,
 			'prio': priority,
@@ -228,18 +228,19 @@ class _EasyNameAPIClient(object):
 			'success': True
 		}
 	
-	def list_dns(self, domain_name, limit=10, offset=0):
+	def list_dns(self, domain, limit=10, offset=0):
 		"""
 		Get all DNS entries of the specified domain
 		"""
-		domain = self.get_domain(domain_name)
 		return self.do_request('GET', 'domain/{0}/dns?offset={1}&limit={2}'.format(domain['id'], offset, limit), {})
 	
 	def delete_dns(self, domain_name, name, type, content):
 		"""
 		Deletes a DNS entry on the specified domain, if found
 		"""
-		entries = self.list_dns(domain_name)
+		domain = self.get_domain(domain_name)
+		name = name.replace('.' + domain['domain'], '')
+		entries = self.list_dns(domain)
 		
 		for entry in entries:
 			if entry['name'] == name and entry['type'] == type and entry['content'] == content:
