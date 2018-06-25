@@ -101,9 +101,8 @@ class _EasyNameAPIClient(object):
 		}
 		
 		# get the loginxtoken from the markup
-		minput = re.search("name=\"loginxtoken\" value=\"[0-9a-f]+\"", resp_out.text)
-		loginxtokenquoted = re.search("\"[0-9a-f]+\"", minput)
-		loginxtoken = re.search("[0-9a-f]+", loginxtokenquoted)
+		minput = re.search("name=\"loginxtoken\" value=\"([0-9a-f]+)\"", resp_out.text)
+		loginxtoken = minput.group(0)
 		
 		# do the login (upgrades the session id to logged in)
 		data_login = {
