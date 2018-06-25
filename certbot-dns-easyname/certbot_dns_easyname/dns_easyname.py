@@ -7,6 +7,7 @@ import hashlib
 import urllib
 import time
 import requests
+import re
 
 import httplib2
 import zope.interface
@@ -17,7 +18,8 @@ from certbot.plugins import dns_common
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = 'https://api.easyname.com'
+BASE_URL_API = 'https://api.easyname.com'
+BASE_URL_WEB = 'https://my.easyname.com'
 
 
 @zope.interface.implementer(interfaces.IAuthenticator)
@@ -71,7 +73,7 @@ class Authenticator(dns_common.DNSAuthenticator):
 		self._get_easyname_api_client().delete_dns(domain, validation_name[0:final_validation_name_length], 'txt', validation)
 
 	def _get_easyname_api_client(self):
-		return _EasyNameAPIClient(self.credentials, BASE_URL)
+		return _EasyNameAPIClient(self.credentials, BASE_URL_API, BASE_URL_WEB)
 
 
 class _EasyNameAPIClient(object):
@@ -79,9 +81,42 @@ class _EasyNameAPIClient(object):
 	Encapsulates all communication with the Easyname API.
 	"""
 
-	def __init__(self, configuration, base_url):
+	def __init__(self, configuration, base_url_api, base_url_web):
 		self.configuration = configuration
-		self.base_url = base_url
+		self.base_url_api = base_url_api
+		self.base_url_web = base_url_web
+		self.web_headers = {
+			'User-Agent': 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.87 Safari/537.36'
+		}
+		
+		# do a request to get the seesion id cookie and the loginxtoken
+		url_login = self.base_url_web + '/de/anmelden'		
+		resp_out = requests.get(url_login, headers=self.web_headers)
+		
+		if resp_out.status_code != 200:
+			raise errors.PluginError('Request to get Session Cookie failed with status code {0}'.format(resp_out.status_code))
+		
+		self.web_cookies = {
+			'PHPSESSID': resp_out.cookies['PHPSESSID']
+		}
+		
+		# get the loginxtoken from the markup
+		minput = re.search("name=\"loginxtoken\" value=\"[0-9a-f]+\"", resp_out.text)
+		loginxtokenquoted = re.search("\"[0-9a-f]+\"", minput)
+		loginxtoken = re.search("[0-9a-f]+", loginxtokenquoted)
+		
+		# do the login (upgrades the session id to logged in)
+		data_login = {
+			'username': self.configuration.conf('email'),
+			'password': self.configuration.conf('password'),
+			'submit': '',
+			'loginxtoken': loginxtoken
+		}
+		
+		resp_login = requests.post(url_login, headers=self.web_headers, cookies=self.web_cookies, data=data_login)
+		
+		if resp_login.status_code != 200:
+			raise errors.PluginError('Request to login failed with status code {0}'.format(resp_login.status_code))
 
 	def get_api_authentication(self):
 		"""
@@ -173,14 +208,28 @@ class _EasyNameAPIClient(object):
 		"""
 		Adds a DNS entry to the specified domain
 		"""
-		domain = self.get_domain(domain_name)
-		return self.do_request('POST', 'domain/{0}/dns'.format(domain['id']), {
+		domain = self.get_domain(domain_name)		
+		
+		url_create_dns = self.base_url_in + '/domains/settings/form.php?domain={0}'.format(domain['id'])
+		data_create_dns = {
+			'id': '',
+			'action': 'save',
 			'name': name,
-			'type': type,
+			'type': type.upper(),
 			'content': content,
-			'priority': priority,
-			'ttl': ttl
-		})
+			'prio': priority,
+			'ttl': ttl,
+			'commit': ''
+		}
+
+		resp_create = requests.post(url_create_dns, headers=self.web_headers, cookies=self.web_cookies, data=data_create_dns)
+		
+		if resp_create.status_code != 200:
+			raise errors.PluginError('Request to create dns entry failed with status code {0}'.format(resp_create.status_code))
+		
+		return {
+			'success': True
+		}
 	
 	def list_dns(self, domain_name, limit=10, offset=0):
 		"""
