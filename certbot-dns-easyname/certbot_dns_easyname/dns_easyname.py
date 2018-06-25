@@ -56,6 +56,7 @@ class Authenticator(dns_common.DNSAuthenticator):
 			{
 				'user-id': 'user-id associated with your Easyname account',
 				'email': 'email address associated with your Easyname account',
+				'password': 'password associated with your Easyname account',
 				'api-key': 'API Key found on the API Credentials Page',
 				'api-auth-salt': 'API Authentication Salt found on the API Credentials Page',
 				'api-signing-salt': 'API Signing Salt found on the API Credentials Page'
@@ -209,7 +210,7 @@ class _EasyNameAPIClient(object):
 		"""
 		domain = self.get_domain(domain_name)		
 		
-		url_create_dns = self.base_url_in + '/domains/settings/form.php?domain={0}'.format(domain['id'])
+		url_create_dns = self.base_url_web + '/domains/settings/form.php?domain={0}'.format(domain['id'])
 		data_create_dns = {
 			'id': '',
 			'action': 'save',

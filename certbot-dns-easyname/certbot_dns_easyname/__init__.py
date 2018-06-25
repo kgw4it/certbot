@@ -33,6 +33,7 @@ credentials, obtained from your Easyname
    # Easyname API credentials used by Certbot
    certbot_dns_easyname:dns_easyname_user_id = 123
    certbot_dns_easyname:dns_easyname_email = easyname@example.com
+   certbot_dns_easyname:dns_easyname_password = pass123
    certbot_dns_easyname:dns_easyname_api_key = 0123456789abcdef0123456789abcdef01234567
    certbot_dns_easyname:dns_easyname_api_auth_salt = 012%s345%s678
    certbot_dns_easyname:dns_easyname_api_signing_salt = 0123456789abcdef0123456789abcdef01234567
