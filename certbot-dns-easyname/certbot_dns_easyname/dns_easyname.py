@@ -201,7 +201,7 @@ class _EasyNameAPIClient(object):
 		zone_name_guesses = dns_common.base_domain_name_guesses(domain_name)
 		for domain in domains:
 			if domain['domain'] in zone_name_guesses:
-				return domain['domain']
+				return domain
 				
 		raise errors.PluginError('Domain not found: {0}'.format(domain_name))
 	
