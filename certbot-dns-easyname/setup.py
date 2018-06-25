@@ -13,8 +13,7 @@ install_requires = [
     'httplib2',
 	# required libs
 	'pybase64',
-	'requests',
-	're'
+	'requests'
 ]
 
 docs_extras = [
