@@ -198,9 +198,10 @@ class _EasyNameAPIClient(object):
 		Get the specified domain document
 		"""
 		domains = self.list_domains(100, 0)
+		zone_name_guesses = dns_common.base_domain_name_guesses(domain)
 		for domain in domains:
-			if domain['domain'] == domain_name:
-				return domain
+			if domain['domain'] in zone_name_guesses:
+				return domain['domain']
 				
 		raise errors.PluginError('Domain not found: {0}'.format(domain_name))
 	
