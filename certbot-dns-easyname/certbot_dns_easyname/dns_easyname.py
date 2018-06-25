@@ -83,7 +83,7 @@ class _EasyNameAPIClient(object):
 
 	def __init__(self, configuration, base_url_api, base_url_web):
 		self.configuration = configuration
-		self.base_url_api = base_url_api
+		self.base_url = base_url_api
 		self.base_url_web = base_url_web
 		self.web_headers = {
 			'User-Agent': 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.87 Safari/537.36'
