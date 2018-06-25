@@ -33,6 +33,7 @@ class Authenticator(dns_common.DNSAuthenticator):
 	description = ('Obtain certificates using a DNS TXT record (if you are using Easyname '
 				   'for DNS).')
 	ttl = 60
+	easyname_client = None
 
 	def __init__(self, *args, **kwargs):
 		super(Authenticator, self).__init__(*args, **kwargs)
@@ -70,7 +71,9 @@ class Authenticator(dns_common.DNSAuthenticator):
 		self._get_easyname_api_client().delete_dns(domain, validation_name, 'txt', validation)
 
 	def _get_easyname_api_client(self):
-		return _EasyNameAPIClient(self.credentials, BASE_URL_API, BASE_URL_WEB)
+		if easyname_client is None:
+			easyname_client = _EasyNameAPIClient(self.credentials, BASE_URL_API, BASE_URL_WEB)
+		return easyname_client
 
 
 class _EasyNameAPIClient(object):
@@ -99,7 +102,7 @@ class _EasyNameAPIClient(object):
 		
 		# get the loginxtoken from the markup
 		minput = re.search("name=\"loginxtoken\" value=\"([0-9a-f]+)\"", resp_out.text)
-		loginxtoken = minput.group(0)
+		loginxtoken = minput.group(1)
 		
 		# do the login (upgrades the session id to logged in)
 		data_login = {
@@ -228,7 +231,7 @@ class _EasyNameAPIClient(object):
 			'success': True
 		}
 	
-	def list_dns(self, domain, limit=10, offset=0):
+	def list_dns(self, domain, limit=100, offset=0):
 		"""
 		Get all DNS entries of the specified domain
 		"""
