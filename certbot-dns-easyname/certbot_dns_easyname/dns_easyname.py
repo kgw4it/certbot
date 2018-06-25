@@ -71,9 +71,9 @@ class Authenticator(dns_common.DNSAuthenticator):
 		self._get_easyname_api_client().delete_dns(domain, validation_name, 'txt', validation)
 
 	def _get_easyname_api_client(self):
-		if easyname_client is None:
-			easyname_client = _EasyNameAPIClient(self.credentials, BASE_URL_API, BASE_URL_WEB)
-		return easyname_client
+		if self.easyname_client is None:
+			self.easyname_client = _EasyNameAPIClient(self.credentials, BASE_URL_API, BASE_URL_WEB)
+		return self.easyname_client
 
 
 class _EasyNameAPIClient(object):
