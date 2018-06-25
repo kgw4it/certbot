@@ -248,4 +248,6 @@ class _EasyNameAPIClient(object):
 			if entry['name'] == name and entry['type'] == type and entry['content'] == content:
 				return self.do_request('POST', 'domain/{0}/dns/{1}/delete'.format(domain['id'], entry['id']), {})
 				
-		raise errors.PluginError('DNS entry not found ({0}): {1}, {2}, {3}'.format(domain_name, name, type, content))
+		return {
+			'success': True
+		}
