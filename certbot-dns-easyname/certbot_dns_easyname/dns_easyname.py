@@ -247,7 +247,7 @@ class _EasyNameAPIClient(object):
         if len(success.group(0)) == 0:
             raise errors.PluginError('Request to list dns entry failed: No success page: {0}'.format(resp_create.text))
         
-        table = etree.HTML(data).xpath('//table[@id="cp_domains_dnseintraege"]//tr')
+        table = etree.HTML(resp_list.text).xpath('//table[@id="cp_domains_dnseintraege"]//tr')
         rows = iter(table)
         resp = []
         for r in rows:
