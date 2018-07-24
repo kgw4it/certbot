@@ -244,18 +244,29 @@ class _EasyNameAPIClient(object):
 		resp_list = requests.get(url_list_dns, headers=self.web_headers, cookies=self.web_cookies)
 		success = re.search('cp_domains_dnseintraege', resp_list.text)
 		
-		if len(success.getGroup(0)) == 0:
+		if len(success.group(0)) == 0:
 			raise errors.PluginError('Request to list dns entry failed: No success page: {0}'.format(resp_create.text))
 		
-		table = etree.HTML(resp_list.text).xpath("//table[@id = 'cp_domains_dnseintraege']")
+		table = etree.HTML(data).xpath('//table[@id="cp_domains_dnseintraege"]//tr')
 		rows = iter(table)
-		for row in rows:
-			id = re.search(';id=([0-9]+)', row.xpath('/@ondblclick')).getGroup(1)
-			name = row.xpath('/td[0]/text()')
-			type = row.xpath('/td[1]/text()').split(' ')[-1]
-			content = row.xpath('/td[2]/text()')
-			print [id, name, content, url]
-		return self.do_request('GET', 'domain/{0}/dns?offset={1}&limit={2}'.format(domain['id'], offset, limit), {})
+		resp = []
+        for r in rows:
+			try:
+				row = etree.HTML(etree.tostring(r))
+				id = re.search('&id=([0-9]+)', row.xpath('//@ondblclick')[0]).group(1)
+				name = row.xpath('//td[1]/text()')[0].strip()
+				type = row.xpath('//td[2]/text()')[0].strip()
+				content = row.xpath('//td[3]/text()')[0].strip()
+				resp.append({
+					'id': id,
+					'name': name,
+					'type': type,
+					'content': content
+				})
+			except:
+				pass
+		
+		return resp
 	
 	def delete_dns(self, domain_name, name, type, content):
 		"""
