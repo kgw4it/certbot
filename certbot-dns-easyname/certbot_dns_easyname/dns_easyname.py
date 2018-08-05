@@ -33,7 +33,7 @@ class Authenticator(dns_common.DNSAuthenticator):
 
     description = ('Obtain certificates using a DNS TXT record (if you are using Easyname '
                    'for DNS).')
-    ttl = 60
+    ttl = 300
     easyname_client = None
 
     def __init__(self, *args, **kwargs):
@@ -66,7 +66,7 @@ class Authenticator(dns_common.DNSAuthenticator):
         )
 
     def _perform(self, domain, validation_name, validation):
-        self._get_easyname_api_client().create_dns(domain, validation_name, 'txt', validation, 300, self.ttl)
+        self._get_easyname_api_client().create_dns(domain, validation_name, 'txt', validation, 10, self.ttl)
 
     def _cleanup(self, domain, validation_name, validation):
         self._get_easyname_api_client().delete_dns(domain, validation_name, 'txt', validation)
