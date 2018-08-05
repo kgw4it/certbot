@@ -278,7 +278,7 @@ class _EasyNameAPIClient(object):
         print "To be removed: {0}, {1}, {2}, {3}".format(domain_name, name, type, content)
         for entry in entries:
             print "Processing: {0}, {1}, {2}".format(entry['name'], entry['type'], entry['content'])
-            if entry['name'] == name and entry['type'] == type and entry['content'] == content:
+            if entry['name'] == name and entry['type'].upper() == type.upper() and entry['content'] == content:
                 return self.do_request('POST', 'domain/{0}/dns/{1}/delete'.format(domain['id'], entry['id']), {})
                 
         return {
