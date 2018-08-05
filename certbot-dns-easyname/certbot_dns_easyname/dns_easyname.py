@@ -279,7 +279,9 @@ class _EasyNameAPIClient(object):
         for entry in entries:
             print "Processing: {0}, {1}, {2}".format(entry['name'], entry['type'], entry['content'])
             if entry['name'] == name and entry['type'].upper() == type.upper() and entry['content'] == content:
-                return self.do_request('POST', 'domain/{0}/dns/{1}/delete'.format(domain['id'], entry['id']), {})
+                print "Removing entry"
+                url_del_dns = self.base_url_web + '/domains/settings/delete_record.php?domain={0}&id={1}&confirm=1'.format(domain['id'], entry['id'])
+                resp_list = requests.get(url_del_dns, headers=self.web_headers, cookies=self.web_cookies)
                 
         return {
             'success': True
