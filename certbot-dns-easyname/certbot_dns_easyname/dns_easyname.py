@@ -226,7 +226,7 @@ class _EasyNameAPIClient(object):
         resp_create = requests.post(url_create_dns, headers=self.web_headers, cookies=self.web_cookies, data=data_create_dns)
         success = re.search('cp_domains_dnseintraege', resp_create.text)
         
-        if len(success.group(0)) == 0:
+        if success is None or len(success.group(0)) == 0:
             raise errors.PluginError('Request to create dns entry failed: No success page: {0}'.format(resp_create.text))
         
         if resp_create.status_code != 200:
@@ -244,7 +244,7 @@ class _EasyNameAPIClient(object):
         resp_list = requests.get(url_list_dns, headers=self.web_headers, cookies=self.web_cookies)
         success = re.search('cp_domains_dnseintraege', resp_list.text)
         
-        if len(success.group(0)) == 0:
+        if success is None or len(success.group(0)) == 0:
             raise errors.PluginError('Request to list dns entry failed: No success page: {0}'.format(resp_create.text))
         
         table = etree.HTML(resp_list.text).xpath('//table[@id="cp_domains_dnseintraege"]//tr')
