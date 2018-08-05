@@ -227,7 +227,7 @@ class _EasyNameAPIClient(object):
         success = re.search('cp_domains_dnseintraege', resp_create.text.encode('utf-8'))
         
         if success is None or len(success.group(0)) == 0:
-            raise errors.PluginError('Request to create dns entry failed: No success page: {0}'.format(resp_create.text))
+            raise errors.PluginError('Request to create dns entry failed: No success page: {0}'.format(resp_create.text.encode('utf-8')))
         
         if resp_create.status_code != 200:
             raise errors.PluginError('Request to create dns entry failed with status code {0}'.format(resp_create.status_code))
@@ -245,7 +245,7 @@ class _EasyNameAPIClient(object):
         success = re.search('cp_domains_dnseintraege', resp_list.text.encode('utf-8'))
         
         if success is None or len(success.group(0)) == 0:
-            raise errors.PluginError('Request to list dns entry failed: No success page: {0}'.format(resp_create.text))
+            raise errors.PluginError('Request to list dns entry failed: No success page: {0}'.format(resp_create.text.encode('utf-8')))
         
         table = etree.HTML(resp_list.text.encode('utf-8')).xpath('//table[@id="cp_domains_dnseintraege"]//tr')
         rows = iter(table)
