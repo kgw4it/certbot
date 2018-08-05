@@ -42,7 +42,7 @@ class Authenticator(dns_common.DNSAuthenticator):
 
     @classmethod
     def add_parser_arguments(cls, add):  # pylint: disable=arguments-differ
-        super(Authenticator, cls).add_parser_arguments(add, default_propagation_seconds=30)
+        super(Authenticator, cls).add_parser_arguments(add, default_propagation_seconds=60)
         add('credentials',
             help=('Path to Easyname DNS configuration file'),
             default=None)
@@ -66,7 +66,7 @@ class Authenticator(dns_common.DNSAuthenticator):
         )
 
     def _perform(self, domain, validation_name, validation):
-        self._get_easyname_api_client().create_dns(domain, validation_name, 'txt', validation, 10, self.ttl)
+        self._get_easyname_api_client().create_dns(domain, validation_name, 'txt', validation, 300, self.ttl)
 
     def _cleanup(self, domain, validation_name, validation):
         self._get_easyname_api_client().delete_dns(domain, validation_name, 'txt', validation)
