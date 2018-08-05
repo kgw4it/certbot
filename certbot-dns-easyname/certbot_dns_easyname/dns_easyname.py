@@ -273,7 +273,6 @@ class _EasyNameAPIClient(object):
         Deletes a DNS entry on the specified domain, if found
         """
         domain = self.get_domain(domain_name)
-        name = name.replace('.' + domain['domain'], '')
         entries = self.list_dns(domain)
         
         print "To be removed: {0}, {1}, {2}, {3}".format(domain_name, name, type, content)
