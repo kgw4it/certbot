@@ -102,7 +102,7 @@ class _EasyNameAPIClient(object):
         }
         
         # get the loginxtoken from the markup
-        minput = re.search("name=\"loginxtoken\" value=\"([0-9a-f]+)\"", resp_out.text)
+        minput = re.search("name=\"loginxtoken\" value=\"([0-9a-f]+)\"", resp_out.text.encode('utf-8'))
         loginxtoken = minput.group(1)
         
         # do the login (upgrades the session id to logged in)
@@ -224,7 +224,7 @@ class _EasyNameAPIClient(object):
         }
 
         resp_create = requests.post(url_create_dns, headers=self.web_headers, cookies=self.web_cookies, data=data_create_dns)
-        success = re.search('cp_domains_dnseintraege', resp_create.text)
+        success = re.search('cp_domains_dnseintraege', resp_create.text.encode('utf-8'))
         
         if success is None or len(success.group(0)) == 0:
             raise errors.PluginError('Request to create dns entry failed: No success page: {0}'.format(resp_create.text))
@@ -242,12 +242,12 @@ class _EasyNameAPIClient(object):
         """
         url_list_dns = self.base_url_web + '/domains/settings/dns.php?domain={0}'.format(domain['id'])
         resp_list = requests.get(url_list_dns, headers=self.web_headers, cookies=self.web_cookies)
-        success = re.search('cp_domains_dnseintraege', resp_list.text)
+        success = re.search('cp_domains_dnseintraege', resp_list.text.encode('utf-8'))
         
         if success is None or len(success.group(0)) == 0:
             raise errors.PluginError('Request to list dns entry failed: No success page: {0}'.format(resp_create.text))
         
-        table = etree.HTML(resp_list.text).xpath('//table[@id="cp_domains_dnseintraege"]//tr')
+        table = etree.HTML(resp_list.text.encode('utf-8')).xpath('//table[@id="cp_domains_dnseintraege"]//tr')
         rows = iter(table)
         resp = []
         for r in rows:
