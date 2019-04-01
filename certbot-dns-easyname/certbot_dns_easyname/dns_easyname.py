@@ -116,7 +116,7 @@ class _EasyNameAPIClient(object):
             'loginxtoken': loginxtoken
         }
         
-        resp_login = requests.post(url_login, headers=self.web_headers, cookies=self.web_cookies, data=data_login)
+        resp_login = requests.post(url_login, headers=self.web_headers, cookies=self.web_cookies, data=data_login, allow_redirects=False)
         
         if resp_login.status_code != 302:
             req = resp_login.request
