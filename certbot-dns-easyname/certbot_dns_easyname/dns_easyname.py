@@ -117,6 +117,9 @@ class _EasyNameAPIClient(object):
         
         if resp_login.status_code != 200:
             raise errors.PluginError('Request to login failed with status code {0}'.format(resp_login.status_code))
+        else:
+            raise errors.PluginError('TMP: {0}'.format(resp_login.text.encode('utf-8')))
+            
         
         # update cookies
         self.web_cookies = {
