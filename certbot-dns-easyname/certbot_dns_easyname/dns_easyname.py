@@ -87,7 +87,10 @@ class _EasyNameAPIClient(object):
         self.base_url = base_url_api
         self.base_url_web = base_url_web
         self.web_headers = {
-            'User-Agent': 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.87 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.87 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Referer': self.base_url_web
         }
         
         # do a request to get the seesion id cookie and the loginxtoken
@@ -115,11 +118,8 @@ class _EasyNameAPIClient(object):
         
         resp_login = requests.post(url_login, headers=self.web_headers, cookies=self.web_cookies, data=data_login)
         
-        if resp_login.status_code != 200:
+        if resp_login.status_code != 302:
             raise errors.PluginError('Request to login failed with status code {0}'.format(resp_login.status_code))
-        else:
-            raise errors.PluginError('TMP: {0}'.format(resp_login.text.encode('utf-8')))
-            
         
         # update cookies
         self.web_cookies = {
