@@ -98,7 +98,7 @@ class _EasyNameAPIClient(object):
             raise errors.PluginError('Request to get Session Cookie failed with status code {0}'.format(resp_out.status_code))
         
         self.web_cookies = {
-            'PHPSESSID': resp_out.cookies['PHPSESSID']
+            'ENSID': resp_out.cookies['ENSID']
         }
         
         # get the loginxtoken from the markup
