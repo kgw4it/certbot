@@ -119,7 +119,16 @@ class _EasyNameAPIClient(object):
         resp_login = requests.post(url_login, headers=self.web_headers, cookies=self.web_cookies, data=data_login)
         
         if resp_login.status_code != 302:
-            raise errors.PluginError('Request to login failed with status code: {0}\n{1}\n{2}\n{3}\n\n\n{4}\n{5}\n{6}'.format(url_login, json.dumps(self.web_headers), json.dumps(self.web_cookies), json.dumps(data_login), resp_login.status_code, json.dumps(dict(resp_login.headers)), resp_login.text.encode('utf-8')))
+            req = resp_login.request
+
+            command = "curl -X {method} -H {headers} -d '{data}' '{uri}'"
+            method = req.method
+            uri = req.url
+            data = req.body
+            headers = ['"{0}: {1}"'.format(k, v) for k, v in req.headers.items()]
+            headers = " -H ".join(headers)
+            curl_cmd = command.format(method=method, headers=headers, data=data, uri=uri)
+            raise errors.PluginError('Request to login failed with status code: {0}\n\n\n{1}\n{2}\n{3}'.format(curl_cmd, resp_login.status_code, json.dumps(dict(resp_login.headers)), resp_login.text.encode('utf-8')))
         
         # update cookies
         self.web_cookies = {
