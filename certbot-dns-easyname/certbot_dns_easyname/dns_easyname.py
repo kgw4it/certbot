@@ -117,6 +117,11 @@ class _EasyNameAPIClient(object):
         
         if resp_login.status_code != 200:
             raise errors.PluginError('Request to login failed with status code {0}'.format(resp_login.status_code))
+        
+        # update cookies
+        self.web_cookies = {
+            'ENSID': resp_login.cookies['ENSID']
+        }
 
     def get_api_authentication(self):
         """
