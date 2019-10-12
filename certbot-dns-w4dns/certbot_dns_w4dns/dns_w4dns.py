@@ -2,6 +2,7 @@
 import logging
 
 import httplib2
+from urllib import urlencode
 import zope.interface
 
 from certbot import errors
@@ -181,8 +182,7 @@ class _W4DNSClient(object):
         except e:
                 raise errors.PluginError('Error determining record_id for {0} of domain {1}'.format(record_name, domain))
 
-        resp = content.json
-
+        resp = content.json()
         if resp['data']:
             # Cleanup is returning the system to the state we found it. If, for some reason,
             # there are multiple matching records, we only delete one because we only added one.
@@ -202,11 +202,11 @@ class _W4DNSClient(object):
         h = httplib2.Http(".cache")
         headers = {
             'Accept': 'application/json',
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
             'Authorization': 'Bearer ' + self.api_key
         }
         try:
-            (resp_headers, content) = h.request(W4DNS_BASE_URL + "/dnsrecord/" + domain_id, "POST", headers=headers, data=data)
+            (resp_headers, content) = h.request(W4DNS_BASE_URL + "/dnsrecord/" + domain_id, "POST", headers=headers, data=urlencode(data))
         except e:
                 raise errors.PluginError('Error adding record to domain {0}'.format(domain_id))
 
