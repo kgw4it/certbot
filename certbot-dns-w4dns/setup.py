@@ -12,7 +12,8 @@ install_requires = [
     'mock',
     'setuptools',
     'zope.interface',
-    'httplib2'
+    'httplib2',
+    'requests'
 ]
 
 docs_extras = [

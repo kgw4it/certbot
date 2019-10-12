@@ -3,6 +3,7 @@ import logging
 
 import httplib2
 from urllib import urlencode
+import requests
 import zope.interface
 
 from certbot import errors
@@ -141,7 +142,6 @@ class _W4DNSClient(object):
 
         zone_name_guesses = dns_common.base_domain_name_guesses(domain)
 
-        h = httplib2.Http(".cache")
         headers = {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -149,13 +149,13 @@ class _W4DNSClient(object):
         }
         for zone_name in zone_name_guesses:
             try:
-                (resp_headers, content) = h.request(W4DNS_BASE_URL + "/domain?pagesize=1&q=" + zone_name, "GET", headers=headers)
+                resp = requests.get(W4DNS_BASE_URL + "/domain?pagesize=1&q=" + zone_name, headers=headers)
             except e:
                 raise errors.PluginError('Error determining domain_id for {0}'.format(domain))
 
-            resp = content.json()
-            if resp.data:
-                domain_id = resp.data[0]._id
+            dataresp = resp.json()
+            if dataresp.data:
+                domain_id = dataresp.data[0]._id
                 logger.debug('Found domain_id of %s for %s using name %s', domain_id, domain, zone_name)
                 return domain_id
 
@@ -171,22 +171,21 @@ class _W4DNSClient(object):
         :returns: The record_id, if found.
         :rtype: str
         """
-        h = httplib2.Http(".cache")
         headers = {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + self.api_key
         }
         try:
-            (resp_headers, content) = h.request(W4DNS_BASE_URL + "/dnsrecord/" + domain_id + "?pagesize=1&q=" + record_name, "GET", headers=headers)
+            resp = requests.get(W4DNS_BASE_URL + "/dnsrecord/" + domain_id + "?pagesize=1&q=" + record_name, headers=headers)
         except e:
                 raise errors.PluginError('Error determining record_id for {0} of domain {1}'.format(record_name, domain))
 
-        resp = content.json()
-        if resp.data:
+        dataresp = resp.json()
+        if dataresp.data:
             # Cleanup is returning the system to the state we found it. If, for some reason,
             # there are multiple matching records, we only delete one because we only added one.
-            for record in resp.data
+            for record in dataresp.data
                 if record.type == 'TXT' and record.content == record.content:
                     return record._id
 
@@ -199,14 +198,13 @@ class _W4DNSClient(object):
         :param str domain_id: The domain_id where to add the record to
         :param obj data: The domain record data
         """
-        h = httplib2.Http(".cache")
         headers = {
             'Accept': 'application/json',
             'Content-Type': 'application/x-www-form-urlencoded',
             'Authorization': 'Bearer ' + self.api_key
         }
         try:
-            (resp_headers, content) = h.request(W4DNS_BASE_URL + "/dnsrecord/" + domain_id, "POST", headers=headers, data=urlencode(data))
+            requests.post(W4DNS_BASE_URL + "/dnsrecord/" + domain_id, headers=headers, data=urlencode(data))
         except e:
                 raise errors.PluginError('Error adding record to domain {0}'.format(domain_id))
 
@@ -217,14 +215,13 @@ class _W4DNSClient(object):
         :param str domain_id: The domain_id where to remove the record from
         :param str record_id: The record_id of the record to remove
         """
-        h = httplib2.Http(".cache")
         headers = {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + self.api_key
         }
         try:
-            (resp_headers, content) = h.request(W4DNS_BASE_URL + "/dnsrecord/" + domain_id + "/" + record_id, "DELETE", headers=headers)
+            requests.delete(W4DNS_BASE_URL + "/dnsrecord/" + domain_id + "/" + record_id, headers=headers)
         except e:
             raise errors.PluginError('Error removing record from domain {0}: {1}'.format(domain_id, record_id))
 
