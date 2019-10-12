@@ -2,8 +2,8 @@
 import logging
 
 import httplib2
-from urllib import urlencode
 import requests
+from urllib.parse import urlencode
 import zope.interface
 
 from certbot import errors
@@ -33,7 +33,7 @@ class Authenticator(dns_common.DNSAuthenticator):
 
     @classmethod
     def add_parser_arguments(cls, add):  # pylint: disable=arguments-differ
-        super(Authenticator, cls).add_parser_arguments(add)
+        super(Authenticator, cls).add_parser_arguments(add, default_propagation_seconds=30)
         add('credentials', help='W4DNS credentials INI file.')
 
     def more_info(self):  # pylint: disable=missing-docstring,no-self-use
@@ -79,19 +79,19 @@ class _W4DNSClient(object):
         """
 
         try:
-            domain_id = self._find_domain_id(domain)
+            domaindoc = self._find_domain(domain)
         except errors.PluginError as e:
             logger.debug('Encountered error finding domain_id during addition: %s', e)
             raise e
 
         data = {'type': 'TXT',
-                'name': record_name,
+                'name': record_name.replace('.' + domaindoc['name'], ''),
                 'content': record_content,
                 'ttl': record_ttl}
 
         try:
-            logger.debug('Attempting to add record to domain %s: %s', domain_id, data)
-            self._add_dns_record(domain_id, data=data)
+            logger.debug('Attempting to add record to domain %s: %s', domaindoc['_id'], data)
+            self._add_dns_record(domaindoc['_id'], data=data)
         except errors.PluginError as e:
             logger.error('Encountered W4DNS API Error adding TXT record: %d %s', e, e)
             raise e
@@ -111,32 +111,32 @@ class _W4DNSClient(object):
         """
 
         try:
-            domain_id = self._find_domain_id(domain)
+            domaindoc = self._find_domain(domain)
         except errors.PluginError as e:
             logger.debug('Encountered error finding domain_id during deletion: %s', e)
             raise e
 
         try:
-            record_id = self._find_txt_record_id(domain_id, record_name, record_content)
+            record_id = self._find_txt_record_id(domaindoc['_id'], record_name.replace('.' + domaindoc['name'], ''), record_content)
             logger.debug('Successfully found TXT record with record_id: %s', record_id)
         except errors.PluginError as e:
             logger.error('Encountered W4DNS API Error looking up TXT record: %d %s', e, e)
             raise e
 
         try:
-            self._delete_dns_record(domain_id, record_id)
+            self._delete_dns_record(domaindoc['_id'], record_id)
             logger.debug('Successfully deleted TXT record.')
         except errors.PluginError as e:
             logger.warning('Encountered W4DNS API Error deleting TXT record: %s', e)
             raise e
 
-    def _find_domain_id(self, domain):
+    def _find_domain(self, domain):
         """
-        Find the domain_id for a given domain.
+        Find the domain doc for a given domain.
 
         :param str domain: The domain for which to find the domain_id.
-        :returns: The domain_id, if found.
-        :rtype: str
+        :returns: The domain doc, if found.
+        :rtype: obj
         :raises certbot.errors.PluginError: if no domain_id is found.
         """
 
@@ -154,10 +154,12 @@ class _W4DNSClient(object):
                 raise errors.PluginError('Error determining domain_id for {0}'.format(domain))
 
             dataresp = resp.json()
-            if dataresp.data:
-                domain_id = dataresp.data[0]._id
-                logger.debug('Found domain_id of %s for %s using name %s', domain_id, domain, zone_name)
-                return domain_id
+            if dataresp['data'] and len(dataresp['data']) > 0:
+                logger.debug('Found domain_id of %s for %s using name %s', dataresp['data'][0]['_id'], domain, zone_name)
+                return {
+                    '_id': dataresp['data'][0]['_id'],
+                    'name': dataresp['data'][0]['name']
+                }
 
         raise errors.PluginError('Unable to determine domain_id for {0} using zone names: {1}'.format(domain, zone_name_guesses))
 
@@ -182,16 +184,16 @@ class _W4DNSClient(object):
                 raise errors.PluginError('Error determining record_id for {0} of domain {1}'.format(record_name, domain))
 
         dataresp = resp.json()
-        if dataresp.data:
+        if dataresp['data']:
             # Cleanup is returning the system to the state we found it. If, for some reason,
             # there are multiple matching records, we only delete one because we only added one.
-            for record in dataresp.data
-                if record.type == 'TXT' and record.content == record.content:
-                    return record._id
+            for record in dataresp['data']:
+                if record['type'] == 'TXT' and record['content'] == record['content']:
+                    return record['_id']
 
         raise errors.PluginError('Unable to find TXT record.')
 
-    def _add_dns_record(self, domain_id, data=data):
+    def _add_dns_record(self, domain_id, data):
         """
         Add a dns record to domain
 
