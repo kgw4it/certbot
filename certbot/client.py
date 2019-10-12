@@ -1,17 +1,15 @@
 """Certbot client API."""
 import datetime
 import logging
-import os
 import platform
 
-
+import OpenSSL
+import josepy as jose
+import zope.component
 from cryptography.hazmat.backends import default_backend
 # https://github.com/python/typeshed/blob/master/third_party/
 # 2/cryptography/hazmat/primitives/asymmetric/rsa.pyi
 from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key  # type: ignore
-import josepy as jose
-import OpenSSL
-import zope.component
 
 from acme import client as acme_client
 from acme import crypto_util as acme_crypto_util
@@ -20,7 +18,6 @@ from acme import messages
 from acme.magic_typing import Optional  # pylint: disable=unused-import,no-name-in-module
 
 import certbot
-
 from certbot import account
 from certbot import auth_handler
 from certbot import cli
@@ -33,11 +30,10 @@ from certbot import interfaces
 from certbot import reverter
 from certbot import storage
 from certbot import util
-
-from certbot.display import ops as display_ops
+from certbot.compat import os
 from certbot.display import enhancements
+from certbot.display import ops as display_ops
 from certbot.plugins import selection as plugin_selection
-
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +61,17 @@ def determine_user_agent(config):
     if config.user_agent is None:
         ua = ("CertbotACMEClient/{0} ({1}; {2}{8}) Authenticator/{3} Installer/{4} "
               "({5}; flags: {6}) Py/{7}")
-        ua = ua.format(certbot.__version__, cli.cli_command, util.get_os_info_ua(),
+        if os.environ.get("CERTBOT_DOCS") == "1":
+            cli_command = "certbot(-auto)"
+            os_info = "OS_NAME OS_VERSION"
+            python_version = "major.minor.patchlevel"
+        else:
+            cli_command = cli.cli_command
+            os_info = util.get_os_info_ua()
+            python_version = platform.python_version()
+        ua = ua.format(certbot.__version__, cli_command, os_info,
                        config.authenticator, config.installer, config.verb,
-                       ua_flags(config), platform.python_version(),
+                       ua_flags(config), python_version,
                        "; " + config.user_agent_comment if config.user_agent_comment else "")
     else:
         ua = config.user_agent
@@ -194,9 +198,27 @@ def perform_registration(acme, config, tos_cb):
     :returns: Registration Resource.
     :rtype: `acme.messages.RegistrationResource`
     """
+
+    eab_credentials_supplied = config.eab_kid and config.eab_hmac_key
+    if eab_credentials_supplied:
+        account_public_key = acme.client.net.key.public_key()
+        eab = messages.ExternalAccountBinding.from_data(account_public_key=account_public_key,
+                                                        kid=config.eab_kid,
+                                                        hmac_key=config.eab_hmac_key,
+                                                        directory=acme.client.directory)
+    else:
+        eab = None
+
+    if acme.external_account_required():
+        if not eab_credentials_supplied:
+            msg = ("Server requires external account binding."
+                   " Please use --eab-kid and --eab-hmac-key.")
+            raise errors.Error(msg)
+
     try:
-        return acme.new_account_and_tos(messages.NewRegistration.from_data(email=config.email),
-            tos_cb)
+        newreg = messages.NewRegistration.from_data(email=config.email,
+                                                    external_account_binding=eab)
+        return acme.new_account_and_tos(newreg, tos_cb)
     except messages.Error as e:
         if e.code == "invalidEmail" or e.code == "invalidContact":
             if config.noninteractive_mode:
@@ -325,7 +347,7 @@ class Client(object):
 
         orderr = self._get_order_and_authorizations(csr.data, self.config.allow_subset_of_names)
         authzr = orderr.authorizations
-        auth_domains = set(a.body.identifier.value for a in authzr)
+        auth_domains = set(a.body.identifier.value for a in authzr)  # pylint: disable=not-an-iterable
         successful_domains = [d for d in domains if d in auth_domains]
 
         # allow_subset_of_names is currently disabled for wildcard
@@ -394,11 +416,10 @@ class Client(object):
             logger.debug("Dry run: Skipping creating new lineage for %s",
                         new_name)
             return None
-        else:
-            return storage.RenewableCert.new_lineage(
-                new_name, cert,
-                key.pem, chain,
-                self.config)
+        return storage.RenewableCert.new_lineage(
+            new_name, cert,
+            key.pem, chain,
+            self.config)
 
     def _choose_lineagename(self, domains, certname):
         """Chooses a name for the new lineage.
@@ -417,8 +438,7 @@ class Client(object):
         elif util.is_wildcard_domain(domains[0]):
             # Don't make files and directories starting with *.
             return domains[0][2:]
-        else:
-            return domains[0]
+        return domains[0]
 
     def save_certificate(self, cert_pem, chain_pem,
                          cert_path, chain_path, fullchain_path):
@@ -438,9 +458,7 @@ class Client(object):
 
         """
         for path in cert_path, chain_path, fullchain_path:
-            util.make_or_verify_dir(
-                os.path.dirname(path), 0o755, os.geteuid(),
-                self.config.strict_permissions)
+            util.make_or_verify_dir(os.path.dirname(path), 0o755, self.config.strict_permissions)
 
 
         cert_file, abs_cert_path = _open_pem_file('cert_path', cert_path)
@@ -528,6 +546,11 @@ class Client(object):
                 if ask_redirect:
                     if config_name == "redirect" and config_value is None:
                         config_value = enhancements.ask(enhancement_name)
+                        if not config_value:
+                            logger.warning("Future versions of Certbot will automatically "
+                                "configure the webserver so that all requests redirect to secure "
+                                "HTTPS access. You can control this behavior and disable this "
+                                "warning with the --redirect and --no-redirect flags.")
                 if config_value:
                     self.apply_enhancement(domains, enhancement_name, option)
                     enhanced = True
@@ -601,7 +624,7 @@ class Client(object):
             reporter.add_message(
                 "An error occurred and we failed to restore your config and "
                 "restart your server. Please post to "
-                "https://community.letsencrypt.org/c/server-config "
+                "https://community.letsencrypt.org/c/help "
                 "with details about your configuration and this error you received.",
                 reporter.HIGH_PRIORITY)
             raise
@@ -676,7 +699,7 @@ def rollback(default_installer, checkpoints, config, plugins):
         installer.restart()
 
 
-def view_config_changes(config, num=None):
+def view_config_changes(config):
     """View checkpoints and associated configuration changes.
 
     .. note:: This assumes that the installation is using a Reverter object.
@@ -687,7 +710,7 @@ def view_config_changes(config, num=None):
     """
     rev = reverter.Reverter(config)
     rev.recovery_routine()
-    rev.view_config_changes(num)
+    rev.view_config_changes()
 
 def _open_pem_file(cli_arg_path, pem_path):
     """Open a pem file.
@@ -704,9 +727,8 @@ def _open_pem_file(cli_arg_path, pem_path):
     if cli.set_by_cli(cli_arg_path):
         return util.safe_open(pem_path, chmod=0o644, mode="wb"),\
             os.path.abspath(pem_path)
-    else:
-        uniq = util.unique_file(pem_path, 0o644, "wb")
-        return uniq[0], os.path.abspath(uniq[1])
+    uniq = util.unique_file(pem_path, 0o644, "wb")
+    return uniq[0], os.path.abspath(uniq[1])
 
 def _save_chain(chain_pem, chain_file):
     """Saves chain_pem at a unique path based on chain_path.

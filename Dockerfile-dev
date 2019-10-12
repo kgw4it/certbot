@@ -1,5 +1,5 @@
 # This Dockerfile builds an image for development.
-FROM ubuntu:xenial
+FROM debian:buster
 
 # Note: this only exposes the port to other docker containers.
 EXPOSE 80 443
@@ -16,6 +16,6 @@ RUN apt-get update && \
            /tmp/* \
            /var/tmp/*
 
-RUN VENV_NAME="../venv" tools/venv.sh
+RUN VENV_NAME="../venv" python tools/venv.py
 
 ENV PATH /opt/certbot/venv/bin:$PATH

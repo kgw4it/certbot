@@ -3,21 +3,23 @@ from setuptools import find_packages
 from setuptools.command.test import test as TestCommand
 import sys
 
-version = '0.26.0.dev0'
+version = '0.40.0.dev0'
 
 # Please update tox.ini when modifying dependency version requirements
 install_requires = [
     # load_pem_private/public_key (>=0.6)
     # rsa_recover_prime_factors (>=0.8)
-    'cryptography>=0.8',
+    'cryptography>=1.2.3',
     # formerly known as acme.jose:
-    'josepy>=1.0.0',
+    # 1.1.0+ is required to avoid the warnings described at
+    # https://github.com/certbot/josepy/issues/13.
+    'josepy>=1.1.0',
     # Connection.set_tlsext_host_name (>=0.13)
     'mock',
-    'PyOpenSSL>=0.13',
+    'PyOpenSSL>=0.13.1',
     'pyrfc3339',
     'pytz',
-    'requests[security]>=2.4.1',  # security extras added in 2.4.1
+    'requests[security]>=2.6.0',  # security extras added in 2.4.1
     'requests-toolbelt>=0.3.0',
     'setuptools',
     'six>=1.9.0',  # needed for python_2_unicode_compatible
@@ -34,6 +36,7 @@ docs_extras = [
     'sphinx_rtd_theme',
 ]
 
+
 class PyTest(TestCommand):
     user_options = []
 
@@ -48,6 +51,7 @@ class PyTest(TestCommand):
         errno = pytest.main(shlex.split(self.pytest_args))
         sys.exit(errno)
 
+
 setup(
     name='acme',
     version=version,
@@ -58,7 +62,7 @@ setup(
     license='Apache License 2.0',
     python_requires='>=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*',
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: Apache Software License',
         'Programming Language :: Python',
@@ -68,6 +72,8 @@ setup(
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Security',
     ],
@@ -79,7 +85,7 @@ setup(
         'dev': dev_extras,
         'docs': docs_extras,
     },
-    tests_require=["pytest"],
     test_suite='acme',
+    tests_require=["pytest"],
     cmdclass={"test": PyTest},
 )

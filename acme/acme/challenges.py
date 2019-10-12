@@ -1,29 +1,27 @@
 """ACME Identifier Validation Challenges."""
 import abc
-import codecs
 import functools
 import hashlib
 import logging
 import socket
+import sys
 
 from cryptography.hazmat.primitives import hashes  # type: ignore
 import josepy as jose
-from OpenSSL import crypto
+import OpenSSL
 import requests
 import six
 
 from acme import errors
 from acme import crypto_util
 from acme import fields
+from acme import _TLSSNI01DeprecationModule
 
 logger = logging.getLogger(__name__)
 
 
-# pylint: disable=too-few-public-methods
-
-
 class Challenge(jose.TypedJSONObjectWithFields):
-    # _fields_to_partial_json | pylint: disable=abstract-method
+    # _fields_to_partial_json
     """ACME challenge."""
     TYPES = {}  # type: dict
 
@@ -37,7 +35,7 @@ class Challenge(jose.TypedJSONObjectWithFields):
 
 
 class ChallengeResponse(jose.TypedJSONObjectWithFields):
-    # _fields_to_partial_json | pylint: disable=abstract-method
+    # _fields_to_partial_json
     """ACME challenge response."""
     TYPES = {}  # type: dict
     resource_type = 'challenge'
@@ -96,6 +94,7 @@ class _TokenChallenge(Challenge):
         """
         # TODO: check that path combined with uri does not go above
         # URI_ROOT_PATH!
+        # pylint: disable=unsupported-membership-test
         return b'..' not in self.token and b'/' not in self.token
 
 
@@ -140,10 +139,14 @@ class KeyAuthorizationChallengeResponse(ChallengeResponse):
 
         return True
 
+    def to_partial_json(self):
+        jobj = super(KeyAuthorizationChallengeResponse, self).to_partial_json()
+        jobj.pop('keyAuthorization', None)
+        return jobj
+
 
 @six.add_metaclass(abc.ABCMeta)
 class KeyAuthorizationChallenge(_TokenChallenge):
-    # pylint: disable=abstract-class-little-used,too-many-ancestors
     """Challenge based on Key Authorization.
 
     :param response_cls: Subclass of `KeyAuthorizationChallengeResponse`
@@ -175,7 +178,7 @@ class KeyAuthorizationChallenge(_TokenChallenge):
         :rtype: KeyAuthorizationChallengeResponse
 
         """
-        return self.response_cls(
+        return self.response_cls(  # pylint: disable=not-callable
             key_authorization=self.key_authorization(account_key))
 
     @abc.abstractmethod
@@ -212,7 +215,7 @@ class DNS01Response(KeyAuthorizationChallengeResponse):
     """ACME dns-01 challenge response."""
     typ = "dns-01"
 
-    def simple_verify(self, chall, domain, account_public_key):
+    def simple_verify(self, chall, domain, account_public_key):  # pylint: disable=unused-argument
         """Simple verify.
 
         This method no longer checks DNS records and is a simple wrapper
@@ -228,7 +231,6 @@ class DNS01Response(KeyAuthorizationChallengeResponse):
         :rtype: bool
 
         """
-        # pylint: disable=unused-argument
         verified = self.verify(chall, account_public_key)
         if not verified:
             logger.debug("Verification of key authorization in response failed")
@@ -412,8 +414,8 @@ class TLSSNI01Response(KeyAuthorizationChallengeResponse):
 
         """
         if key is None:
-            key = crypto.PKey()
-            key.generate_key(crypto.TYPE_RSA, bits)
+            key = OpenSSL.crypto.PKey()
+            key.generate_key(OpenSSL.crypto.TYPE_RSA, bits)
         return crypto_util.gen_ss_cert(key, [
             # z_domain is too big to fit into CN, hence first dummy domain
             'dummy', self.z_domain.decode()], force_san=True), key
@@ -433,7 +435,6 @@ class TLSSNI01Response(KeyAuthorizationChallengeResponse):
         kwargs.setdefault("port", self.PORT)
         kwargs["name"] = self.z_domain
         # TODO: try different methods?
-        # pylint: disable=protected-access
         return crypto_util.probe_sni(**kwargs)
 
     def verify_cert(self, cert):
@@ -510,153 +511,32 @@ class TLSSNI01(KeyAuthorizationChallenge):
 
 @ChallengeResponse.register
 class TLSALPN01Response(KeyAuthorizationChallengeResponse):
-    """ACME tls-alpn-01 challenge response."""
-    typ = "tls-alpn-01"
+    """ACME TLS-ALPN-01 challenge response.
 
-    PORT = 443
-    """Verification port as defined by the protocol.
-
-    You can override it (e.g. for testing) by passing ``port`` to
-    `simple_verify`.
-
+    This class only allows initiating a TLS-ALPN-01 challenge returned from the
+    CA. Full support for responding to TLS-ALPN-01 challenges by generating and
+    serving the expected response certificate is not currently provided.
     """
-
-    ID_PE_ACME_IDENTIFIER_V1 = b"1.3.6.1.5.5.7.1.30.1"
-    ACME_TLS_1_PROTOCOL = "acme-tls/1"
-
-    @property
-    def h(self):
-        """Hash value stored in challenge certificate"""
-        return hashlib.sha256(self.key_authorization.encode('utf-8')).digest()
-
-    def gen_cert(self, domain, key=None, bits=2048):
-        """Generate tls-alpn-01 certificate.
-
-        :param unicode domain: Domain verified by the challenge.
-        :param OpenSSL.crypto.PKey key: Optional private key used in
-            certificate generation. If not provided (``None``), then
-            fresh key will be generated.
-        :param int bits: Number of bits for newly generated key.
-
-        :rtype: `tuple` of `OpenSSL.crypto.X509` and `OpenSSL.crypto.PKey`
-
-        """
-        if key is None:
-            key = crypto.PKey()
-            key.generate_key(crypto.TYPE_RSA, bits)
-
-
-        # Instead of using a ASN.1 encoding library just append the OCTET STRING tag (0x04)
-        # and the length of the SHA256 hash (0x20) since both of these should never change
-        der_value = b"DER:0420" + codecs.encode(self.h, 'hex')
-        acme_extension = crypto.X509Extension(self.ID_PE_ACME_IDENTIFIER_V1,
-                critical=True, value=der_value)
-
-        return crypto_util.gen_ss_cert(key, [domain], force_san=True,
-                extensions=[acme_extension]), key
-
-    def probe_cert(self, domain, host=None, port=None):
-        """Probe tls-alpn-01 challenge certificate.
-
-        :param unicode domain: domain being validated, required.
-        :param string host: IP address used to probe the certificate.
-        :param int port: Port used to probe the certificate.
-
-        """
-        if host is None:
-            host = socket.gethostbyname(domain)
-            logger.debug('%s resolved to %s', domain, host)
-        if port is None:
-            port = self.PORT
-
-        return crypto_util.probe_sni(host=host, port=port, name=domain,
-                alpn_protocols=[self.ACME_TLS_1_PROTOCOL])
-
-    def verify_cert(self, domain, cert):
-        """Verify tls-alpn-01 challenge certificate.
-
-        :param unicode domain: Domain name being validated.
-        :param OpensSSL.crypto.X509 cert: Challenge certificate.
-
-        :returns: Whether the certificate was successfully verified.
-        :rtype: bool
-
-        """
-        # pylint: disable=protected-access
-        names = crypto_util._pyopenssl_cert_or_req_all_names(cert)
-        logger.debug('Certificate %s. SANs: %s', cert.digest('sha256'), names)
-        if len(names) != 1 or names[0].lower() != domain.lower():
-            return False
-
-        for i in range(cert.get_extension_count()):
-            ext = cert.get_extension(i)
-            # FIXME: assume this is the ACME extension. Currently there is no
-            # way to get full OID of an unknown extension from pyopenssl.
-            if ext.get_short_name() == b'UNDEF':
-                data = ext.get_data()
-                # Add the ASN.1 tag/length prefix to the hash before comparison
-                return data == b'\x04\x20' + self.h
-
-        return False
-
-    # pylint: disable=too-many-arguments
-    def simple_verify(self, chall, domain, account_public_key,
-                      cert=None, host=None, port=None):
-        """Simple verify.
-
-        Verify ``validation`` using ``account_public_key``, optionally
-        probe tls-alpn-01 certificate and check using `verify_cert`.
-
-        :param .challenges.TLSALPN01 chall: Corresponding challenge.
-        :param str domain: Domain name being validated.
-        :param JWK account_public_key:
-        :param OpenSSL.crypto.X509 cert: Optional certificate. If not
-            provided (``None``) certificate will be retrieved using
-            `probe_cert`.
-        :param string host: IP address used to probe the certificate.
-        :param int port: Port used to probe the certificate.
-
-
-        :returns: ``True`` iff client's control of the domain has been
-            verified.
-        :rtype: bool
-
-        """
-        if not self.verify(chall, account_public_key):
-            logger.debug("Verification of key authorization in response failed")
-            return False
-
-        if cert is None:
-            try:
-                cert = self.probe_cert(domain=domain, host=host, port=port)
-            except errors.Error as error:
-                logger.debug(str(error), exc_info=True)
-                return False
-
-        return self.verify_cert(cert, domain)
+    typ = "tls-alpn-01"
 
 
 @Challenge.register  # pylint: disable=too-many-ancestors
 class TLSALPN01(KeyAuthorizationChallenge):
-    """ACME tls-alpn-01 challenge."""
+    """ACME tls-alpn-01 challenge.
+
+    This class simply allows parsing the TLS-ALPN-01 challenge returned from
+    the CA. Full TLS-ALPN-01 support is not currently provided.
+
+    """
+    typ = "tls-alpn-01"
     response_cls = TLSALPN01Response
-    typ = response_cls.typ
 
     def validation(self, account_key, **kwargs):
-        """Generate validation.
-
-        :param JWK account_key:
-        :param OpenSSL.crypto.PKey cert_key: Optional private key used
-            in certificate generation. If not provided (``None``), then
-            fresh key will be generated.
-
-        :rtype: `tuple` of `OpenSSL.crypto.X509` and `OpenSSL.crypto.PKey`
-
-        """
-        return self.response(account_key).gen_cert(key=kwargs.get('cert_key'))
+        """Generate validation for the challenge."""
+        raise NotImplementedError()
 
 
-@Challenge.register  # pylint: disable=too-many-ancestors
+@Challenge.register
 class DNS(_TokenChallenge):
     """ACME "dns" challenge."""
     typ = "dns"
@@ -737,3 +617,7 @@ class DNSResponse(ChallengeResponse):
 
         """
         return chall.check_validation(self.validation, account_public_key)
+
+
+# Patching ourselves to warn about TLS-SNI challenge deprecation and removal.
+sys.modules[__name__] = _TLSSNI01DeprecationModule(sys.modules[__name__])

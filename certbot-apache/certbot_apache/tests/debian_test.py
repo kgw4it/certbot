@@ -1,11 +1,11 @@
 """Test for certbot_apache.configurator for Debian overrides"""
-import os
 import shutil
 import unittest
 
 import mock
 
 from certbot import errors
+from certbot.compat import os
 
 from certbot_apache import apache_util
 from certbot_apache import obj
@@ -20,7 +20,7 @@ class MultipleVhostsTestDebian(util.ApacheTest):
     def setUp(self):  # pylint: disable=arguments-differ
         super(MultipleVhostsTestDebian, self).setUp()
         self.config = util.get_apache_configurator(
-            self.config_path, None, self.config_dir, self.work_dir,
+            self.config_path, self.vhost_path, self.config_dir, self.work_dir,
             os_info="debian")
         self.config = self.mock_deploy_cert(self.config)
         self.vh_truth = util.get_vh_truth(self.temp_dir,
@@ -79,9 +79,9 @@ class MultipleVhostsTestDebian(util.ApacheTest):
 
     def test_enable_site_failure(self):
         self.config.parser.root = "/tmp/nonexistent"
-        with mock.patch("os.path.isdir") as mock_dir:
+        with mock.patch("certbot.compat.os.path.isdir") as mock_dir:
             mock_dir.return_value = True
-            with mock.patch("os.path.islink") as mock_link:
+            with mock.patch("certbot.compat.os.path.islink") as mock_link:
                 mock_link.return_value = False
                 self.assertRaises(
                     errors.NotSupportedError,

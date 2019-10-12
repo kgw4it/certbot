@@ -1,15 +1,17 @@
 """Test for certbot_apache.http_01."""
-import mock
-import os
 import unittest
+import mock
 
 from acme import challenges
 from acme.magic_typing import List  # pylint: disable=unused-import, no-name-in-module
 
 from certbot import achallenges
 from certbot import errors
-
+from certbot.compat import filesystem
+from certbot.compat import os
 from certbot.tests import acme_util
+
+from certbot_apache.parser import get_aug_path
 from certbot_apache.tests import util
 
 
@@ -19,15 +21,15 @@ NUM_ACHALLS = 3
 class ApacheHttp01Test(util.ApacheTest):
     """Test for certbot_apache.http_01.ApacheHttp01."""
 
-    def setUp(self, *args, **kwargs):
+    def setUp(self, *args, **kwargs):  # pylint: disable=arguments-differ
         super(ApacheHttp01Test, self).setUp(*args, **kwargs)
 
         self.account_key = self.rsa512jwk
         self.achalls = []  # type: List[achallenges.KeyAuthorizationAnnotatedChallenge]
         vh_truth = util.get_vh_truth(
             self.temp_dir, "debian_apache_2_4/multiple_vhosts")
-        # Takes the vhosts for encryption-example.demo, certbot.demo, and
-        # vhost.in.rootconf
+        # Takes the vhosts for encryption-example.demo, certbot.demo
+        # and vhost.in.rootconf
         self.vhosts = [vh_truth[0], vh_truth[3], vh_truth[10]]
 
         for i in range(NUM_ACHALLS):
@@ -38,7 +40,7 @@ class ApacheHttp01Test(util.ApacheTest):
                         "pending"),
                     domain=self.vhosts[i].name, account_key=self.account_key))
 
-        modules = ["rewrite", "authz_core", "authz_host"]
+        modules = ["ssl", "rewrite", "authz_core", "authz_host"]
         for mod in modules:
             self.config.parser.modules.add("mod_{0}.c".format(mod))
             self.config.parser.modules.add(mod + "_module")
@@ -77,7 +79,7 @@ class ApacheHttp01Test(util.ApacheTest):
         calls = mock_enmod.call_args_list
         other_calls = []
         for call in calls:
-            if "rewrite" != call[0][0]:
+            if call[0][0] != "rewrite":
                 other_calls.append(call)
 
         # If these lists are equal, we never enabled mod_rewrite
@@ -110,6 +112,17 @@ class ApacheHttp01Test(util.ApacheTest):
                 domain="something.nonexistent", account_key=self.account_key)]
         self.common_perform_test(achalls, vhosts)
 
+    def test_configure_multiple_vhosts(self):
+        vhosts = [v for v in self.config.vhosts if "duplicate.example.com" in v.get_names()]
+        self.assertEqual(len(vhosts), 2)
+        achalls = [
+            achallenges.KeyAuthorizationAnnotatedChallenge(
+                challb=acme_util.chall_to_challb(
+                    challenges.HTTP01(token=((b'a' * 16))),
+                    "pending"),
+                domain="duplicate.example.com", account_key=self.account_key)]
+        self.common_perform_test(achalls, vhosts)
+
     def test_no_vhost(self):
         for achall in self.achalls:
             self.http.add_chall(achall)
@@ -134,6 +147,21 @@ class ApacheHttp01Test(util.ApacheTest):
     def test_perform_3_achall_apache_2_4(self):
         self.combinations_perform_test(num_achalls=3, minor_version=4)
 
+    def test_activate_disabled_vhost(self):
+        vhosts = [v for v in self.config.vhosts if v.name == "certbot.demo"]
+        achalls = [
+            achallenges.KeyAuthorizationAnnotatedChallenge(
+                challb=acme_util.chall_to_challb(
+                    challenges.HTTP01(token=((b'a' * 16))),
+                    "pending"),
+                domain="certbot.demo", account_key=self.account_key)]
+        vhosts[0].enabled = False
+        self.common_perform_test(achalls, vhosts)
+        matches = self.config.parser.find_dir(
+            "Include", vhosts[0].filep,
+            get_aug_path(self.config.parser.loc["default"]))
+        self.assertEqual(len(matches), 1)
+
     def combinations_perform_test(self, num_achalls, minor_version):
         """Test perform with the given achall count and Apache version."""
         achalls = self.achalls[:num_achalls]
@@ -153,22 +181,21 @@ class ApacheHttp01Test(util.ApacheTest):
         self.assertEqual(self.http.perform(), expected_response)
 
         self.assertTrue(os.path.isdir(self.http.challenge_dir))
-        self._has_min_permissions(self.http.challenge_dir, 0o755)
+        self.assertTrue(filesystem.has_min_permissions(self.http.challenge_dir, 0o755))
         self._test_challenge_conf()
 
         for achall in achalls:
             self._test_challenge_file(achall)
 
         for vhost in vhosts:
-            if not vhost.ssl:
-                matches = self.config.parser.find_dir("Include",
-                                                      self.http.challenge_conf_pre,
-                                                      vhost.path)
-                self.assertEqual(len(matches), 1)
-                matches = self.config.parser.find_dir("Include",
-                                                      self.http.challenge_conf_post,
-                                                      vhost.path)
-                self.assertEqual(len(matches), 1)
+            matches = self.config.parser.find_dir("Include",
+                                                self.http.challenge_conf_pre,
+                                                vhost.path)
+            self.assertEqual(len(matches), 1)
+            matches = self.config.parser.find_dir("Include",
+                                                self.http.challenge_conf_post,
+                                                vhost.path)
+            self.assertEqual(len(matches), 1)
 
         self.assertTrue(os.path.exists(challenge_dir))
 
@@ -192,14 +219,9 @@ class ApacheHttp01Test(util.ApacheTest):
         name = os.path.join(self.http.challenge_dir, achall.chall.encode("token"))
         validation = achall.validation(self.account_key)
 
-        self._has_min_permissions(name, 0o644)
+        self.assertTrue(filesystem.has_min_permissions(name, 0o644))
         with open(name, 'rb') as f:
             self.assertEqual(f.read(), validation.encode())
-
-    def _has_min_permissions(self, path, min_mode):
-        """Tests the given file has at least the permissions in mode."""
-        st_mode = os.stat(path).st_mode
-        self.assertEqual(st_mode, st_mode | min_mode)
 
 
 if __name__ == "__main__":

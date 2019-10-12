@@ -1,9 +1,9 @@
 """Plugin common functions."""
 import logging
-import os
 import re
 import shutil
 import tempfile
+import warnings
 
 import OpenSSL
 import pkg_resources
@@ -12,6 +12,7 @@ import zope.interface
 from josepy import util as jose_util
 
 from acme.magic_typing import List  # pylint: disable=unused-import, no-name-in-module
+
 from certbot import achallenges  # pylint: disable=unused-import
 from certbot import constants
 from certbot import crypto_util
@@ -19,7 +20,8 @@ from certbot import errors
 from certbot import interfaces
 from certbot import reverter
 from certbot import util
-
+from certbot.compat import os
+from certbot.compat import filesystem
 from certbot.plugins.storage import PluginStorage
 
 logger = logging.getLogger(__name__)
@@ -196,10 +198,18 @@ class Installer(Plugin):
             the checkpoints directories.
 
         """
-        try:
-            self.reverter.view_config_changes()
-        except errors.ReverterError as err:
-            raise errors.PluginError(str(err))
+        warnings.warn(
+            "The view_config_changes method is no longer part of Certbot's"
+            " plugin interface, has been deprecated, and will be removed in a"
+            " future release.", DeprecationWarning, stacklevel=2)
+        with warnings.catch_warnings():
+            # Don't let the reverter code warn about this function. Calling
+            # this function in the first place is the real problem.
+            warnings.filterwarnings("ignore", ".*view_config_changes", DeprecationWarning)
+            try:
+                self.reverter.view_config_changes()
+            except errors.ReverterError as err:
+                raise errors.PluginError(str(err))
 
     @property
     def ssl_dhparams(self):
@@ -301,9 +311,8 @@ class Addr(object):
             # too long, truncate
             addr_list = addr_list[0:len(result)]
         append_to_end = False
-        for i in range(0, len(addr_list)):
-            block = addr_list[i]
-            if len(block) == 0:
+        for i, block in enumerate(addr_list):
+            if not block:
                 # encountered ::, so rest of the blocks should be
                 # appended to the end
                 append_to_end = True
@@ -351,7 +360,7 @@ class ChallengePerformer(object):
     def perform(self):
         """Perform all added challenges.
 
-        :returns: challenge respones
+        :returns: challenge responses
         :rtype: `list` of `acme.challenges.KeyAuthorizationChallengeResponse`
 
 
@@ -477,15 +486,15 @@ def dir_setup(test_dir, pkg):  # pragma: no cover
         link, (ex: OS X) such plugins will be confused. This function prevents
         such a case.
         """
-        return os.path.realpath(tempfile.mkdtemp(prefix))
+        return filesystem.realpath(tempfile.mkdtemp(prefix))
 
     temp_dir = expanded_tempdir("temp")
     config_dir = expanded_tempdir("config")
     work_dir = expanded_tempdir("work")
 
-    os.chmod(temp_dir, constants.CONFIG_DIRS_MODE)
-    os.chmod(config_dir, constants.CONFIG_DIRS_MODE)
-    os.chmod(work_dir, constants.CONFIG_DIRS_MODE)
+    filesystem.chmod(temp_dir, constants.CONFIG_DIRS_MODE)
+    filesystem.chmod(config_dir, constants.CONFIG_DIRS_MODE)
+    filesystem.chmod(work_dir, constants.CONFIG_DIRS_MODE)
 
     test_configs = pkg_resources.resource_filename(
         pkg, os.path.join("testdata", test_dir))

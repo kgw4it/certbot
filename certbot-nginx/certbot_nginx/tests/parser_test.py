@@ -1,24 +1,22 @@
 """Tests for certbot_nginx.parser."""
 import glob
-import os
 import re
 import shutil
 import unittest
 
+from acme.magic_typing import List  # pylint: disable=unused-import, no-name-in-module
+
 from certbot import errors
+from certbot.compat import os
 
 from certbot_nginx import nginxparser
 from certbot_nginx import obj
 from certbot_nginx import parser
 from certbot_nginx.tests import util
-from acme.magic_typing import List # pylint: disable=unused-import, no-name-in-module
 
 
 class NginxParserTest(util.NginxTest): #pylint: disable=too-many-public-methods
     """Nginx Parser Test."""
-
-    def setUp(self):
-        super(NginxParserTest, self).setUp()
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir)
@@ -32,8 +30,16 @@ class NginxParserTest(util.NginxTest): #pylint: disable=too-many-public-methods
         self.assertEqual(nparser.root, self.config_path)
 
     def test_root_absolute(self):
-        nparser = parser.NginxParser(os.path.relpath(self.config_path))
-        self.assertEqual(nparser.root, self.config_path)
+        curr_dir = os.getcwd()
+        try:
+            # On Windows current directory may be on a different drive than self.tempdir.
+            # However a relative path between two different drives is invalid. So we move to
+            # self.tempdir to ensure that we stay on the same drive.
+            os.chdir(self.temp_dir)
+            nparser = parser.NginxParser(os.path.relpath(self.config_path))
+            self.assertEqual(nparser.root, self.config_path)
+        finally:
+            os.chdir(curr_dir)
 
     def test_root_no_trailing_slash(self):
         nparser = parser.NginxParser(self.config_path + os.path.sep)
@@ -67,9 +73,15 @@ class NginxParserTest(util.NginxTest): #pylint: disable=too-many-public-methods
 
     def test_abs_path(self):
         nparser = parser.NginxParser(self.config_path)
-        self.assertEqual('/etc/nginx/*', nparser.abs_path('/etc/nginx/*'))
-        self.assertEqual(os.path.join(self.config_path, 'foo/bar/'),
-                         nparser.abs_path('foo/bar/'))
+        if os.name != 'nt':
+            self.assertEqual('/etc/nginx/*', nparser.abs_path('/etc/nginx/*'))
+            self.assertEqual(os.path.join(self.config_path, 'foo/bar'),
+                             nparser.abs_path('foo/bar'))
+        else:
+            self.assertEqual('C:\\etc\\nginx\\*', nparser.abs_path('C:\\etc\\nginx\\*'))
+            self.assertEqual(os.path.join(self.config_path, 'foo\\bar'),
+                             nparser.abs_path('foo\\bar'))
+
 
     def test_filedump(self):
         nparser = parser.NginxParser(self.config_path)

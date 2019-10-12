@@ -13,10 +13,11 @@ and properly flushed before program exit.
 
 """
 from __future__ import print_function
+
 import functools
 import logging
 import logging.handlers
-import os
+import shutil
 import sys
 import tempfile
 import traceback
@@ -26,6 +27,7 @@ from acme import messages
 from certbot import constants
 from certbot import errors
 from certbot import util
+from certbot.compat import os
 
 # Logging format
 CLI_FMT = "%(message)s"
@@ -132,8 +134,7 @@ def setup_log_file_handler(config, logfile, fmt):
     """
     # TODO: logs might contain sensitive data such as contents of the
     # private key! #525
-    util.set_up_core_dir(
-        config.logs_dir, 0o700, os.geteuid(), config.strict_permissions)
+    util.set_up_core_dir(config.logs_dir, 0o700, config.strict_permissions)
     log_file_path = os.path.join(config.logs_dir, logfile)
     try:
         handler = logging.handlers.RotatingFileHandler(
@@ -180,8 +181,7 @@ class ColoredStreamHandler(logging.StreamHandler):
         out = super(ColoredStreamHandler, self).format(record)
         if self.colored and record.levelno >= self.red_level:
             return ''.join((util.ANSI_SGR_RED, out, util.ANSI_SGR_RESET))
-        else:
-            return out
+        return out
 
 
 class MemoryHandler(logging.handlers.MemoryHandler):
@@ -239,9 +239,10 @@ class TempHandler(logging.StreamHandler):
 
     """
     def __init__(self):
-        stream = tempfile.NamedTemporaryFile('w', delete=False)
+        self._workdir = tempfile.mkdtemp()
+        self.path = os.path.join(self._workdir, 'log')
+        stream = util.safe_open(self.path, mode='w', chmod=0o600)
         super(TempHandler, self).__init__(stream)
-        self.path = stream.name
         self._delete = True
 
     def emit(self, record):
@@ -265,7 +266,7 @@ class TempHandler(logging.StreamHandler):
             # stream like stderr to be used
             self.stream.close()
             if self._delete:
-                os.remove(self.path)
+                shutil.rmtree(self._workdir)
             self._delete = False
             super(TempHandler, self).close()
         finally:

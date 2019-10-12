@@ -1,7 +1,6 @@
 
 """Tests for certbot.cert_manager."""
 # pylint: disable=protected-access
-import os
 import re
 import shutil
 import tempfile
@@ -12,10 +11,10 @@ import mock
 
 from certbot import configuration
 from certbot import errors
-
+from certbot.compat import os
+from certbot.compat import filesystem
 from certbot.display import util as display_util
 from certbot.storage import ALL_FOUR
-
 from certbot.tests import storage_test
 from certbot.tests import util as test_util
 
@@ -27,7 +26,7 @@ class BaseCertManagerTest(test_util.ConfigTestCase):
         super(BaseCertManagerTest, self).setUp()
 
         self.config.quiet = False
-        os.makedirs(self.config.renewal_configs_dir)
+        filesystem.makedirs(self.config.renewal_configs_dir)
 
         self.domains = {
             "example.org": None,
@@ -39,21 +38,20 @@ class BaseCertManagerTest(test_util.ConfigTestCase):
         # We also create a file that isn't a renewal config in the same
         # location to test that logic that reads in all-and-only renewal
         # configs will ignore it and NOT attempt to parse it.
-        junk = open(os.path.join(self.config.renewal_configs_dir, "IGNORE.THIS"), "w")
-        junk.write("This file should be ignored!")
-        junk.close()
+        with open(os.path.join(self.config.renewal_configs_dir, "IGNORE.THIS"), "w") as junk:
+            junk.write("This file should be ignored!")
 
     def _set_up_config(self, domain, custom_archive):
         # TODO: maybe provide NamespaceConfig.make_dirs?
         # TODO: main() should create those dirs, c.f. #902
-        os.makedirs(os.path.join(self.config.live_dir, domain))
+        filesystem.makedirs(os.path.join(self.config.live_dir, domain))
         config_file = configobj.ConfigObj()
 
         if custom_archive is not None:
-            os.makedirs(custom_archive)
+            filesystem.makedirs(custom_archive)
             config_file["archive_dir"] = custom_archive
         else:
-            os.makedirs(os.path.join(self.config.default_archive_dir, domain))
+            filesystem.makedirs(os.path.join(self.config.default_archive_dir, domain))
 
         for kind in ALL_FOUR:
             config_file[kind] = os.path.join(self.config.live_dir, domain,
@@ -99,8 +97,8 @@ class UpdateLiveSymlinksTest(BaseCertManagerTest):
                 for kind in ALL_FOUR:
                     os.chdir(os.path.dirname(self.config_files[domain][kind]))
                     self.assertEqual(
-                        os.path.realpath(os.readlink(self.config_files[domain][kind])),
-                        os.path.realpath(archive_paths[domain][kind]))
+                        filesystem.realpath(os.readlink(self.config_files[domain][kind])),
+                        filesystem.realpath(archive_paths[domain][kind]))
         finally:
             os.chdir(prev_dir)
 
@@ -197,17 +195,18 @@ class CertificatesTest(BaseCertManagerTest):
             quiet=False
         ))
 
-        os.makedirs(empty_config.renewal_configs_dir)
+        filesystem.makedirs(empty_config.renewal_configs_dir)
         self._certificates(empty_config)
         self.assertFalse(mock_logger.warning.called) #pylint: disable=no-member
         self.assertTrue(mock_utility.called)
         shutil.rmtree(empty_tempdir)
 
     @mock.patch('certbot.cert_manager.ocsp.RevocationChecker.ocsp_revoked')
-    def test_report_human_readable(self, mock_revoked):
+    def test_report_human_readable(self, mock_revoked): #pylint: disable=too-many-statements
         mock_revoked.return_value = None
         from certbot import cert_manager
-        import datetime, pytz
+        import datetime
+        import pytz
         expiry = pytz.UTC.fromutc(datetime.datetime.utcnow())
 
         cert = mock.MagicMock(lineagename="nameone")
@@ -228,21 +227,21 @@ class CertificatesTest(BaseCertManagerTest):
         cert.target_expiry += datetime.timedelta(hours=2)
         # pylint: disable=protected-access
         out = get_report()
-        self.assertTrue('1 hour(s)' in out)
-        self.assertTrue('VALID' in out and not 'INVALID' in out)
+        self.assertTrue('1 hour(s)' in out or '2 hour(s)' in out)
+        self.assertTrue('VALID' in out and 'INVALID' not in out)
 
         cert.target_expiry += datetime.timedelta(days=1)
         # pylint: disable=protected-access
         out = get_report()
         self.assertTrue('1 day' in out)
         self.assertFalse('under' in out)
-        self.assertTrue('VALID' in out and not 'INVALID' in out)
+        self.assertTrue('VALID' in out and 'INVALID' not in out)
 
         cert.target_expiry += datetime.timedelta(days=2)
         # pylint: disable=protected-access
         out = get_report()
         self.assertTrue('3 days' in out)
-        self.assertTrue('VALID' in out and not 'INVALID' in out)
+        self.assertTrue('VALID' in out and 'INVALID'  not in out)
 
         cert.is_test_cert = True
         mock_revoked.return_value = True
@@ -278,13 +277,12 @@ class SearchLineagesTest(BaseCertManagerTest):
     @mock.patch('certbot.storage.renewal_conf_files')
     @mock.patch('certbot.storage.RenewableCert')
     def test_cert_storage_error(self, mock_renewable_cert, mock_renewal_conf_files,
-        mock_make_or_verify_dir):
+                                mock_make_or_verify_dir):
         mock_renewal_conf_files.return_value = ["badfile"]
         mock_renewable_cert.side_effect = errors.CertStorageError
         from certbot import cert_manager
         # pylint: disable=protected-access
-        self.assertEqual(cert_manager._search_lineages(self.config, lambda x: x, "check"),
-            "check")
+        self.assertEqual(cert_manager._search_lineages(self.config, lambda x: x, "check"), "check")
         self.assertTrue(mock_make_or_verify_dir.called)
 
 
@@ -295,33 +293,28 @@ class LineageForCertnameTest(BaseCertManagerTest):
     @mock.patch('certbot.storage.renewal_file_for_certname')
     @mock.patch('certbot.storage.RenewableCert')
     def test_found_match(self, mock_renewable_cert, mock_renewal_conf_file,
-        mock_make_or_verify_dir):
+                         mock_make_or_verify_dir):
         mock_renewal_conf_file.return_value = "somefile.conf"
         mock_match = mock.Mock(lineagename="example.com")
         mock_renewable_cert.return_value = mock_match
         from certbot import cert_manager
-        self.assertEqual(cert_manager.lineage_for_certname(self.config, "example.com"),
-            mock_match)
+        self.assertEqual(cert_manager.lineage_for_certname(self.config, "example.com"), mock_match)
         self.assertTrue(mock_make_or_verify_dir.called)
 
     @mock.patch('certbot.util.make_or_verify_dir')
     @mock.patch('certbot.storage.renewal_file_for_certname')
-    def test_no_match(self, mock_renewal_conf_file,
-        mock_make_or_verify_dir):
+    def test_no_match(self, mock_renewal_conf_file, mock_make_or_verify_dir):
         mock_renewal_conf_file.return_value = "other.com.conf"
         from certbot import cert_manager
-        self.assertEqual(cert_manager.lineage_for_certname(self.config, "example.com"),
-            None)
+        self.assertEqual(cert_manager.lineage_for_certname(self.config, "example.com"), None)
         self.assertTrue(mock_make_or_verify_dir.called)
 
     @mock.patch('certbot.util.make_or_verify_dir')
     @mock.patch('certbot.storage.renewal_file_for_certname')
-    def test_no_renewal_file(self, mock_renewal_conf_file,
-        mock_make_or_verify_dir):
+    def test_no_renewal_file(self, mock_renewal_conf_file, mock_make_or_verify_dir):
         mock_renewal_conf_file.side_effect = errors.CertStorageError()
         from certbot import cert_manager
-        self.assertEqual(cert_manager.lineage_for_certname(self.config, "example.com"),
-            None)
+        self.assertEqual(cert_manager.lineage_for_certname(self.config, "example.com"), None)
         self.assertTrue(mock_make_or_verify_dir.called)
 
 
@@ -332,7 +325,7 @@ class DomainsForCertnameTest(BaseCertManagerTest):
     @mock.patch('certbot.storage.renewal_file_for_certname')
     @mock.patch('certbot.storage.RenewableCert')
     def test_found_match(self, mock_renewable_cert, mock_renewal_conf_file,
-        mock_make_or_verify_dir):
+                         mock_make_or_verify_dir):
         mock_renewal_conf_file.return_value = "somefile.conf"
         mock_match = mock.Mock(lineagename="example.com")
         domains = ["example.com", "example.org"]
@@ -345,12 +338,10 @@ class DomainsForCertnameTest(BaseCertManagerTest):
 
     @mock.patch('certbot.util.make_or_verify_dir')
     @mock.patch('certbot.storage.renewal_file_for_certname')
-    def test_no_match(self, mock_renewal_conf_file,
-        mock_make_or_verify_dir):
+    def test_no_match(self, mock_renewal_conf_file, mock_make_or_verify_dir):
         mock_renewal_conf_file.return_value = "somefile.conf"
         from certbot import cert_manager
-        self.assertEqual(cert_manager.domains_for_certname(self.config, "other.com"),
-            None)
+        self.assertEqual(cert_manager.domains_for_certname(self.config, "other.com"), None)
         self.assertTrue(mock_make_or_verify_dir.called)
 
 
@@ -589,7 +580,7 @@ class GetCertnameTest(unittest.TestCase):
         from certbot import cert_manager
         prompt = "Which certificate would you"
         self.mock_get_utility().menu.return_value = (display_util.OK, 0)
-        self.assertEquals(
+        self.assertEqual(
             cert_manager.get_certnames(
                 self.config, "verb", allow_multiple=False), ['example.com'])
         self.assertTrue(
@@ -603,11 +594,11 @@ class GetCertnameTest(unittest.TestCase):
         from certbot import cert_manager
         prompt = "custom prompt"
         self.mock_get_utility().menu.return_value = (display_util.OK, 0)
-        self.assertEquals(
+        self.assertEqual(
             cert_manager.get_certnames(
                 self.config, "verb", allow_multiple=False, custom_prompt=prompt),
             ['example.com'])
-        self.assertEquals(self.mock_get_utility().menu.call_args[0][0],
+        self.assertEqual(self.mock_get_utility().menu.call_args[0][0],
                           prompt)
 
     @mock.patch('certbot.storage.renewal_conf_files')
@@ -631,7 +622,7 @@ class GetCertnameTest(unittest.TestCase):
         prompt = "Which certificate(s) would you"
         self.mock_get_utility().checklist.return_value = (display_util.OK,
                                                           ['example.com'])
-        self.assertEquals(
+        self.assertEqual(
             cert_manager.get_certnames(
                 self.config, "verb", allow_multiple=True), ['example.com'])
         self.assertTrue(
@@ -646,11 +637,11 @@ class GetCertnameTest(unittest.TestCase):
         prompt = "custom prompt"
         self.mock_get_utility().checklist.return_value = (display_util.OK,
                                                           ['example.com'])
-        self.assertEquals(
+        self.assertEqual(
             cert_manager.get_certnames(
                 self.config, "verb", allow_multiple=True, custom_prompt=prompt),
             ['example.com'])
-        self.assertEquals(
+        self.assertEqual(
             self.mock_get_utility().checklist.call_args[0][0],
             prompt)
 

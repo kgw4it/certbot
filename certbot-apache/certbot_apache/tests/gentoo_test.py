@@ -1,14 +1,16 @@
 """Test for certbot_apache.configurator for Gentoo overrides"""
-import os
 import unittest
 
 import mock
 
 from certbot import errors
+from certbot.compat import filesystem
+from certbot.compat import os
 
-from certbot_apache import override_gentoo
 from certbot_apache import obj
+from certbot_apache import override_gentoo
 from certbot_apache.tests import util
+
 
 def get_vh_truth(temp_dir, config_name):
     """Return the ground truth for the specified directory."""
@@ -80,7 +82,7 @@ class MultipleVhostsTestGentoo(util.ApacheTest):
         """Make sure we read the Gentoo APACHE2_OPTS variable correctly"""
         defines = ['DEFAULT_VHOST', 'INFO',
                    'SSL', 'SSL_DEFAULT_VHOST', 'LANGUAGE']
-        self.config.parser.apacheconfig_filep = os.path.realpath(
+        self.config.parser.apacheconfig_filep = filesystem.realpath(
             os.path.join(self.config.parser.root, "../conf.d/apache2"))
         self.config.parser.variables = {}
         with mock.patch("certbot_apache.override_gentoo.GentooParser.update_modules"):
@@ -113,23 +115,24 @@ class MultipleVhostsTestGentoo(util.ApacheTest):
             """Mock httpd process stdout"""
             if command == ['apache2ctl', 'modules']:
                 return mod_val
+            return None  # pragma: no cover
         mock_get.side_effect = mock_get_cfg
         self.config.parser.modules = set()
 
         with mock.patch("certbot.util.get_os_info") as mock_osi:
-            # Make sure we have the have the CentOS httpd constants
+            # Make sure we have the have the Gentoo httpd constants
             mock_osi.return_value = ("gentoo", "123")
             self.config.parser.update_runtime_variables()
 
-        self.assertEquals(mock_get.call_count, 1)
-        self.assertEquals(len(self.config.parser.modules), 4)
+        self.assertEqual(mock_get.call_count, 1)
+        self.assertEqual(len(self.config.parser.modules), 4)
         self.assertTrue("mod_another.c" in self.config.parser.modules)
 
     @mock.patch("certbot_apache.configurator.util.run_script")
     def test_alt_restart_works(self, mock_run_script):
         mock_run_script.side_effect = [None, errors.SubprocessError, None]
         self.config.restart()
-        self.assertEquals(mock_run_script.call_count, 3)
+        self.assertEqual(mock_run_script.call_count, 3)
 
 if __name__ == "__main__":
     unittest.main()  # pragma: no cover

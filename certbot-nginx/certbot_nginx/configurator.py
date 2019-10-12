@@ -1,36 +1,42 @@
 """Nginx Configuration"""
+# https://github.com/PyCQA/pylint/issues/73
+from distutils.version import LooseVersion # pylint: disable=no-name-in-module,import-error
 import logging
-import os
 import re
 import socket
 import subprocess
 import tempfile
 import time
 
+import pkg_resources
+
 import OpenSSL
-import six
 import zope.interface
 
 from acme import challenges
 from acme import crypto_util as acme_crypto_util
+from acme.magic_typing import List, Dict, Set  # pylint: disable=unused-import, no-name-in-module
 
 from certbot import constants as core_constants
 from certbot import crypto_util
 from certbot import errors
 from certbot import interfaces
 from certbot import util
-
+from certbot.compat import os
 from certbot.plugins import common
 
 from certbot_nginx import constants
 from certbot_nginx import display_ops
-from certbot_nginx import nginxparser
-from certbot_nginx import parser
-from certbot_nginx import tls_sni_01
 from certbot_nginx import http_01
-from certbot_nginx import obj # pylint: disable=unused-import
-from acme.magic_typing import List, Dict, Set # pylint: disable=unused-import, no-name-in-module
+from certbot_nginx import nginxparser
+from certbot_nginx import obj  # pylint: disable=unused-import
+from certbot_nginx import parser
 
+NAME_RANK = 0
+START_WILDCARD_RANK = 1
+END_WILDCARD_RANK = 2
+REGEX_RANK = 3
+NO_SSL_MODIFIER = 4
 
 
 logger = logging.getLogger(__name__)
@@ -60,7 +66,7 @@ class NginxConfigurator(common.Installer):
 
     """
 
-    description = "Nginx Web Server plugin - Alpha"
+    description = "Nginx Web Server plugin"
 
     DEFAULT_LISTEN_PORT = '80'
 
@@ -69,8 +75,9 @@ class NginxConfigurator(common.Installer):
 
     @classmethod
     def add_parser_arguments(cls, add):
+        default_server_root = _determine_default_server_root()
         add("server-root", default=constants.CLI_DEFAULTS["server_root"],
-            help="Nginx server root directory.")
+            help="Nginx server root directory. (default: %s)" % default_server_root)
         add("ctl", default=constants.CLI_DEFAULTS["ctl"], help="Path to the "
             "'nginx' binary, used for 'configtest' and retrieving nginx "
             "version number.")
@@ -86,8 +93,12 @@ class NginxConfigurator(common.Installer):
         :param tup version: version of Nginx as a tuple (1, 4, 7)
             (used mostly for unittesting)
 
+        :param tup openssl_version: version of OpenSSL linked to Nginx as a tuple (1, 4, 7)
+            (used mostly for unittesting)
+
         """
         version = kwargs.pop("version", None)
+        openssl_version = kwargs.pop("openssl_version", None)
         super(NginxConfigurator, self).__init__(*args, **kwargs)
 
         # Verify that all directories and files exist with proper permissions
@@ -110,11 +121,45 @@ class NginxConfigurator(common.Installer):
         # These will be set in the prepare function
         self.parser = None
         self.version = version
+        self.openssl_version = openssl_version
         self._enhance_func = {"redirect": self._enable_redirect,
                               "ensure-http-header": self._set_http_header,
                               "staple-ocsp": self._enable_ocsp_stapling}
 
         self.reverter.recovery_routine()
+
+    @property
+    def mod_ssl_conf_src(self):
+        """Full absolute path to SSL configuration file source."""
+
+        # Why all this complexity? Well, we want to support Mozilla's intermediate
+        # recommendations. But TLS1.3 is only supported by newer versions of Nginx.
+        # And as for session tickets, our ideal is to turn them off across the board.
+        # But! Turning them off at all is only supported with new enough versions of
+        # Nginx. And older versions of OpenSSL have a bug that leads to browser errors
+        # given certain configurations. While we'd prefer to have forward secrecy, we'd
+        # rather fail open than error out. Unfortunately, Nginx can be compiled against
+        # many versions of OpenSSL. So we have to check both for the two different features,
+        # leading to four different combinations of options.
+        # For a complete history, check out https://github.com/certbot/certbot/issues/7322
+
+        use_tls13 = self.version >= (1, 13, 0)
+        session_tix_off = self.version >= (1, 5, 9) and self.openssl_version and\
+            LooseVersion(self.openssl_version) >= LooseVersion('1.0.2l')
+
+        if use_tls13:
+            if session_tix_off:
+                config_filename = "options-ssl-nginx.conf"
+            else:
+                config_filename = "options-ssl-nginx-tls13-session-tix-on.conf"
+        else:
+            if session_tix_off:
+                config_filename = "options-ssl-nginx-tls12-only.conf"
+            else:
+                config_filename = "options-ssl-nginx-old.conf"
+
+        return pkg_resources.resource_filename(
+            "certbot_nginx", os.path.join("tls_configs", config_filename))
 
     @property
     def mod_ssl_conf(self):
@@ -126,6 +171,11 @@ class NginxConfigurator(common.Installer):
         """Full absolute path to digest of updated SSL configuration file."""
         return os.path.join(self.config.config_dir, constants.UPDATED_MOD_SSL_CONF_DIGEST)
 
+    def install_ssl_options_conf(self, options_ssl, options_ssl_digest):
+        """Copy Certbot's SSL options file into the system's config dir if required."""
+        return common.install_version_controlled_file(options_ssl, options_ssl_digest,
+            self.mod_ssl_conf_src, constants.ALL_SSL_OPTIONS_HASHES)
+
     # This is called in determine_authenticator and determine_installer
     def prepare(self):
         """Prepare the authenticator/installer.
@@ -135,35 +185,36 @@ class NginxConfigurator(common.Installer):
         """
         # Verify Nginx is installed
         if not util.exe_exists(self.conf('ctl')):
-            raise errors.NoInstallationError
+            raise errors.NoInstallationError(
+                "Could not find a usable 'nginx' binary. Ensure nginx exists, "
+                "the binary is executable, and your PATH is set correctly.")
 
         # Make sure configuration is valid
         self.config_test()
 
-
         self.parser = parser.NginxParser(self.conf('server-root'))
-
-        install_ssl_options_conf(self.mod_ssl_conf, self.updated_mod_ssl_conf_digest)
-
-        self.install_ssl_dhparams()
 
         # Set Version
         if self.version is None:
             self.version = self.get_version()
+
+        if self.openssl_version is None:
+            self.openssl_version = self._get_openssl_version()
+
+        self.install_ssl_options_conf(self.mod_ssl_conf, self.updated_mod_ssl_conf_digest)
+
+        self.install_ssl_dhparams()
 
         # Prevent two Nginx plugins from modifying a config at once
         try:
             util.lock_dir_until_exit(self.conf('server-root'))
         except (OSError, errors.LockError):
             logger.debug('Encountered error:', exc_info=True)
-            raise errors.PluginError(
-                'Unable to lock %s', self.conf('server-root'))
-
+            raise errors.PluginError('Unable to lock {0}'.format(self.conf('server-root')))
 
     # Entry point in main.py for installing cert
     def deploy_cert(self, domain, cert_path, key_path,
                     chain_path=None, fullchain_path=None):
-        # pylint: disable=unused-argument
         """Deploys certificate to specified virtual host.
 
         .. note:: Aborts if the vhost is missing ssl_certificate or
@@ -184,8 +235,7 @@ class NginxConfigurator(common.Installer):
         for vhost in vhosts:
             self._deploy_cert(vhost, cert_path, key_path, chain_path, fullchain_path)
 
-    def _deploy_cert(self, vhost, cert_path, key_path, chain_path, fullchain_path):
-        # pylint: disable=unused-argument
+    def _deploy_cert(self, vhost, cert_path, key_path, chain_path, fullchain_path):  # pylint: disable=unused-argument
         """
         Helper function for deploy_cert() that handles the actual deployment
         this exists because we might want to do multiple deployments per
@@ -290,7 +340,7 @@ class NginxConfigurator(common.Installer):
             if create_if_no_match:
                 # result will not be [None] because it errors on failure
                 vhosts = [self._vhost_from_duplicated_default(target_name, True,
-                    str(self.config.tls_sni_01_port))]
+                    str(self.config.https_port))]
             else:
                 # No matches. Raise a misconfiguration error.
                 raise errors.MisconfigurationError(
@@ -402,19 +452,18 @@ class NginxConfigurator(common.Installer):
         """
         if not matches:
             return None
-        elif matches[0]['rank'] in six.moves.range(2, 6):
+        elif matches[0]['rank'] in [START_WILDCARD_RANK, END_WILDCARD_RANK,
+            START_WILDCARD_RANK + NO_SSL_MODIFIER, END_WILDCARD_RANK + NO_SSL_MODIFIER]:
             # Wildcard match - need to find the longest one
             rank = matches[0]['rank']
             wildcards = [x for x in matches if x['rank'] == rank]
             return max(wildcards, key=lambda x: len(x['name']))['vhost']
-        else:
-            # Exact or regex match
-            return matches[0]['vhost']
+        # Exact or regex match
+        return matches[0]['vhost']
 
-
-    def _rank_matches_by_name_and_ssl(self, vhost_list, target_name):
+    def _rank_matches_by_name(self, vhost_list, target_name):
         """Returns a ranked list of vhosts from vhost_list that match target_name.
-        The ranking gives preference to SSL vhosts.
+        This method should always be followed by a call to _select_best_name_match.
 
         :param list vhost_list: list of vhosts to filter and rank
         :param str target_name: The name to match
@@ -434,21 +483,37 @@ class NginxConfigurator(common.Installer):
             if name_type == 'exact':
                 matches.append({'vhost': vhost,
                                 'name': name,
-                                'rank': 0 if vhost.ssl else 1})
+                                'rank': NAME_RANK})
             elif name_type == 'wildcard_start':
                 matches.append({'vhost': vhost,
                                 'name': name,
-                                'rank': 2 if vhost.ssl else 3})
+                                'rank': START_WILDCARD_RANK})
             elif name_type == 'wildcard_end':
                 matches.append({'vhost': vhost,
                                 'name': name,
-                                'rank': 4 if vhost.ssl else 5})
+                                'rank': END_WILDCARD_RANK})
             elif name_type == 'regex':
                 matches.append({'vhost': vhost,
                                 'name': name,
-                                'rank': 6 if vhost.ssl else 7})
+                                'rank': REGEX_RANK})
         return sorted(matches, key=lambda x: x['rank'])
 
+    def _rank_matches_by_name_and_ssl(self, vhost_list, target_name):
+        """Returns a ranked list of vhosts from vhost_list that match target_name.
+        The ranking gives preference to SSLishness before name match level.
+
+        :param list vhost_list: list of vhosts to filter and rank
+        :param str target_name: The name to match
+        :returns: list of dicts containing the vhost, the matching name, and
+            the numerical rank
+        :rtype: list
+
+        """
+        matches = self._rank_matches_by_name(vhost_list, target_name)
+        for match in matches:
+            if not match['vhost'].ssl:
+                match['rank'] += NO_SSL_MODIFIER
+        return sorted(matches, key=lambda x: x['rank'])
 
     def choose_redirect_vhosts(self, target_name, port, create_if_no_match=False):
         """Chooses a single virtual host for redirect enhancement.
@@ -488,25 +553,23 @@ class NginxConfigurator(common.Installer):
         if matching_port == "" or matching_port is None:
             # if no port is specified, Nginx defaults to listening on port 80.
             return test_port == self.DEFAULT_LISTEN_PORT
-        else:
-            return test_port == matching_port
+        return test_port == matching_port
 
     def _vhost_listening_on_port_no_ssl(self, vhost, port):
         found_matching_port = False
-        if len(vhost.addrs) == 0:
+        if not vhost.addrs:
             # if there are no listen directives at all, Nginx defaults to
             # listening on port 80.
             found_matching_port = (port == self.DEFAULT_LISTEN_PORT)
         else:
             for addr in vhost.addrs:
-                if self._port_matches(port, addr.get_port()) and addr.ssl == False:
+                if self._port_matches(port, addr.get_port()) and not addr.ssl:
                     found_matching_port = True
 
         if found_matching_port:
             # make sure we don't have an 'ssl on' directive
             return not self.parser.has_ssl_on_directive(vhost)
-        else:
-            return False
+        return False
 
     def _get_redirect_ranked_matches(self, target_name, port):
         """Gets a ranked list of plaintextish port-listening vhosts matching target_name
@@ -528,9 +591,7 @@ class NginxConfigurator(common.Installer):
 
         matching_vhosts = [vhost for vhost in all_vhosts if _vhost_matches(vhost, port)]
 
-        # We can use this ranking function because sslishness doesn't matter to us, and
-        # there shouldn't be conflicting plaintextish servers listening on 80.
-        return self._rank_matches_by_name_and_ssl(matching_vhosts, target_name)
+        return self._rank_matches_by_name(matching_vhosts, target_name)
 
     def get_all_names(self):
         """Returns all names found in the Nginx Configuration.
@@ -540,7 +601,7 @@ class NginxConfigurator(common.Installer):
         :rtype: set
 
         """
-        all_names = set() # type: Set[str]
+        all_names = set()  # type: Set[str]
 
         for vhost in self.parser.get_vhosts():
             all_names.update(vhost.names)
@@ -565,6 +626,7 @@ class NginxConfigurator(common.Installer):
         return util.get_filtered_names(all_names)
 
     def _get_snakeoil_paths(self):
+        """Generate invalid certs that let us create ssl directives for Nginx"""
         # TODO: generate only once
         tmp_dir = os.path.join(self.config.work_dir, "snakeoil")
         le_key = crypto_util.init_save_key(
@@ -589,13 +651,14 @@ class NginxConfigurator(common.Installer):
         :type vhost: :class:`~certbot_nginx.obj.VirtualHost`
 
         """
-        ipv6info = self.ipv6_info(self.config.tls_sni_01_port)
+        https_port = self.config.https_port
+        ipv6info = self.ipv6_info(https_port)
         ipv6_block = ['']
         ipv4_block = ['']
 
         # If the vhost was implicitly listening on the default Nginx port,
         # have it continue to do so.
-        if len(vhost.addrs) == 0:
+        if not vhost.addrs:
             listen_block = [['\n    ', 'listen', ' ', self.DEFAULT_LISTEN_PORT]]
             self.parser.add_server_directives(vhost, listen_block)
 
@@ -603,7 +666,7 @@ class NginxConfigurator(common.Installer):
             ipv6_block = ['\n    ',
                           'listen',
                           ' ',
-                          '[::]:{0}'.format(self.config.tls_sni_01_port),
+                          '[::]:{0}'.format(https_port),
                           ' ',
                           'ssl']
             if not ipv6info[1]:
@@ -615,7 +678,7 @@ class NginxConfigurator(common.Installer):
             ipv4_block = ['\n    ',
                           'listen',
                           ' ',
-                          '{0}'.format(self.config.tls_sni_01_port),
+                          '{0}'.format(https_port),
                           ' ',
                           'ssl']
 
@@ -777,8 +840,6 @@ class NginxConfigurator(common.Installer):
         :param str domain: domain to enable redirect for
         :param `~obj.Vhost` vhost: vhost to enable redirect for
         """
-
-        http_vhost = None
         if vhost.ssl:
             http_vhost, _ = self._split_block(vhost, ['listen', 'server_name'])
 
@@ -876,13 +937,31 @@ class NginxConfigurator(common.Installer):
         have permissions of root.
 
         """
-        uid = os.geteuid()
-        util.make_or_verify_dir(
-            self.config.work_dir, core_constants.CONFIG_DIRS_MODE, uid)
-        util.make_or_verify_dir(
-            self.config.backup_dir, core_constants.CONFIG_DIRS_MODE, uid)
-        util.make_or_verify_dir(
-            self.config.config_dir, core_constants.CONFIG_DIRS_MODE, uid)
+        util.make_or_verify_dir(self.config.work_dir, core_constants.CONFIG_DIRS_MODE)
+        util.make_or_verify_dir(self.config.backup_dir, core_constants.CONFIG_DIRS_MODE)
+        util.make_or_verify_dir(self.config.config_dir, core_constants.CONFIG_DIRS_MODE)
+
+    def _nginx_version(self):
+        """Return results of nginx -V
+
+        :returns: version text
+        :rtype: str
+
+        :raises .PluginError:
+            Unable to run Nginx version command
+        """
+        try:
+            proc = subprocess.Popen(
+                [self.conf('ctl'), "-c", self.nginx_conf, "-V"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True)
+            text = proc.communicate()[1]  # nginx prints output to stderr
+        except (OSError, ValueError) as error:
+            logger.debug(str(error), exc_info=True)
+            raise errors.PluginError(
+                "Unable to run %s -V" % self.conf('ctl'))
+        return text
 
     def get_version(self):
         """Return version of Nginx Server.
@@ -896,17 +975,7 @@ class NginxConfigurator(common.Installer):
             Unable to find Nginx version or version is unsupported
 
         """
-        try:
-            proc = subprocess.Popen(
-                [self.conf('ctl'), "-c", self.nginx_conf, "-V"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True)
-            text = proc.communicate()[1]  # nginx prints output to stderr
-        except (OSError, ValueError) as error:
-            logger.debug(str(error), exc_info=True)
-            raise errors.PluginError(
-                "Unable to run %s -V" % self.conf('ctl'))
+        text = self._nginx_version()
 
         version_regex = re.compile(r"nginx version: ([^/]+)/([0-9\.]*)", re.IGNORECASE)
         version_matches = version_regex.findall(text)
@@ -938,6 +1007,28 @@ class NginxConfigurator(common.Installer):
             raise errors.NotSupportedError("Nginx version must be 0.8.48+")
 
         return nginx_version
+
+    def _get_openssl_version(self):
+        """Return version of OpenSSL linked to Nginx.
+
+        Version is returned as string. If no version can be found, empty string is returned.
+
+        :returns: openssl_version
+        :rtype: str
+
+        :raises .PluginError:
+            Unable to run Nginx version command
+        """
+        text = self._nginx_version()
+
+        matches = re.findall(r"running with OpenSSL ([^ ]+) ", text)
+        if not matches:
+            matches = re.findall(r"built with OpenSSL ([^ ]+) ", text)
+            if not matches:
+                logger.warning("NGINX configured with OpenSSL alternatives is not officially"
+                    "supported by Certbot.")
+                return ""
+        return matches[0]
 
     def more_info(self):
         """Human-readable string to help understand the module"""
@@ -1016,7 +1107,7 @@ class NginxConfigurator(common.Installer):
     ###########################################################################
     def get_chall_pref(self, unused_domain):  # pylint: disable=no-self-use
         """Return list of challenge preferences."""
-        return [challenges.TLSSNI01, challenges.HTTP01]
+        return [challenges.HTTP01, challenges.TLSSNI01]
 
     # Entry point in main.py for performing challenges
     def perform(self, achalls):
@@ -1029,19 +1120,14 @@ class NginxConfigurator(common.Installer):
         """
         self._chall_out += len(achalls)
         responses = [None] * len(achalls)
-        sni_doer = tls_sni_01.NginxTlsSni01(self)
         http_doer = http_01.NginxHttp01(self)
 
         for i, achall in enumerate(achalls):
             # Currently also have chall_doer hold associated index of the
             # challenge. This helps to put all of the responses back together
             # when they are all complete.
-            if isinstance(achall.chall, challenges.HTTP01):
-                http_doer.add_chall(achall, i)
-            else:  # tls-sni-01
-                sni_doer.add_chall(achall, i)
+            http_doer.add_chall(achall, i)
 
-        sni_response = sni_doer.perform()
         http_response = http_doer.perform()
         # Must restart in order to activate the challenges.
         # Handled here because we may be able to load up other challenge types
@@ -1050,9 +1136,8 @@ class NginxConfigurator(common.Installer):
         # Go through all of the challenges and assign them to the proper place
         # in the responses return value. All responses must be in the same order
         # as the original challenges.
-        for chall_response, chall_doer in ((sni_response, sni_doer), (http_response, http_doer)):
-            for i, resp in enumerate(chall_response):
-                responses[chall_doer.indices[i]] = resp
+        for i, resp in enumerate(http_response):
+            responses[http_doer.indices[i]] = resp
 
         return responses
 
@@ -1125,7 +1210,10 @@ def nginx_restart(nginx_ctl, nginx_conf):
     time.sleep(1)
 
 
-def install_ssl_options_conf(options_ssl, options_ssl_digest):
-    """Copy Certbot's SSL options file into the system's config dir if required."""
-    return common.install_version_controlled_file(options_ssl, options_ssl_digest,
-        constants.MOD_SSL_CONF_SRC, constants.ALL_SSL_OPTIONS_HASHES)
+def _determine_default_server_root():
+    if os.environ.get("CERTBOT_DOCS") == "1":
+        default_server_root = "%s or %s" % (constants.LINUX_SERVER_ROOT,
+            constants.FREEBSD_DARWIN_SERVER_ROOT)
+    else:
+        default_server_root = constants.CLI_DEFAULTS["server_root"]
+    return default_server_root
