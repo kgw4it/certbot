@@ -154,8 +154,8 @@ class _W4DNSClient(object):
                 raise errors.PluginError('Error determining domain_id for {0}'.format(domain))
 
             resp = content.json()
-            if resp['data']:
-                domain_id = resp['data'][0]['_id']
+            if resp.data:
+                domain_id = resp.data[0]._id
                 logger.debug('Found domain_id of %s for %s using name %s', domain_id, domain, zone_name)
                 return domain_id
 
@@ -183,12 +183,12 @@ class _W4DNSClient(object):
                 raise errors.PluginError('Error determining record_id for {0} of domain {1}'.format(record_name, domain))
 
         resp = content.json()
-        if resp['data']:
+        if resp.data:
             # Cleanup is returning the system to the state we found it. If, for some reason,
             # there are multiple matching records, we only delete one because we only added one.
-            for record in resp['data']
-                if record['type'] == 'TXT' and record['content'] == record.content:
-                    return record['_id']
+            for record in resp.data
+                if record.type == 'TXT' and record.content == record.content:
+                    return record._id
 
         raise errors.PluginError('Unable to find TXT record.')
 
