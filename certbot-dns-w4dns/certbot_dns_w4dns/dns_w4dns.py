@@ -45,7 +45,8 @@ class Authenticator(dns_common.DNSAuthenticator):
             'credentials',
             'W4DNS credentials INI file',
             {
-                'api-key': 'API key for W4DNS account, obtained from {0}'.format(ACCOUNT_URL)
+                'api-key': 'API key for W4DNS account, obtained from {0}'.format(ACCOUNT_URL),
+                'domainprovider-id': 'Id of the domainprovide to use'
             }
         )
 
@@ -56,7 +57,7 @@ class Authenticator(dns_common.DNSAuthenticator):
         self._get_w4dns_client().del_txt_record(domain, validation_name, validation)
 
     def _get_w4dns_client(self):
-        return _W4DNSClient(self.credentials.conf('api-key'))
+        return _W4DNSClient(self.credentials.conf('api-key'), self.credentials.conf('domainprovider-id'))
 
 
 class _W4DNSClient(object):
@@ -64,8 +65,9 @@ class _W4DNSClient(object):
     Encapsulates all communication with the W4DNS API.
     """
 
-    def __init__(self, api_key):
+    def __init__(self, api_key, domainprovider_id):
         self.api_key = api_key
+        self.domainprovider_id = domainprovider_id
 
     def add_txt_record(self, domain, record_name, record_content, record_ttl):
         """
@@ -149,7 +151,7 @@ class _W4DNSClient(object):
         }
         for zone_name in zone_name_guesses:
             try:
-                resp = requests.get(W4DNS_BASE_URL + "/domain?pagesize=1&q=" + zone_name, headers=headers)
+                resp = requests.get(W4DNS_BASE_URL + "/domain?pagesize=1&domainproviderid=" + self.domainprovider_id + "&q=" + zone_name, headers=headers)
             except e:
                 raise errors.PluginError('Error determining domain_id for {0}'.format(domain))
 
